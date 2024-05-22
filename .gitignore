@@ -161,3 +161,7 @@ cython_debug/
 
 *.ffcv
 *.beton
+*.json
+log
+*.err
+*.out

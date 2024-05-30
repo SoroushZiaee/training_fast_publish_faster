@@ -17,8 +17,8 @@ write_dataset () {
 write_dataset lamem train 256 0.5 90 # dataset_name, split, max_resolution, compress_probability, jpeg_quality
 write_dataset lamem validation 256 0.5 90 # dataset_name, split, max_resolution, compress_probability, jpeg_quality
 write_dataset lamem test 256 0.5 90 # dataset_name, split, max_resolution, compress_probability, jpeg_quality
-write_dataset imagenet validation 256 0.5 90 # dataset_name, split, max_resolution, compress_probability, jpeg_quality
-write_dataset imagenet train 256 0.5 90 # dataset_name, split, max_resolution, compress_probability, jpeg_quality
+# write_dataset imagenet validation 256 0.5 90 # dataset_name, split, max_resolution, compress_probability, jpeg_quality
+# write_dataset imagenet train 256 0.5 90 # dataset_name, split, max_resolution, compress_probability, jpeg_quality
 
 
 

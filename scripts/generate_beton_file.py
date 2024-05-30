@@ -7,7 +7,7 @@ parent_dir = os.path.dirname(script_dir)  # Get the parent directory
 sys.path.append(parent_dir)
 
 from ffcv.writer import DatasetWriter
-from ffcv.fields import RGBImageField, IntField
+from ffcv.fields import RGBImageField, IntField, FloatField
 
 from torch.utils.data import Subset
 
@@ -48,11 +48,15 @@ def get_dataset(dataset: str, split: str):
     if dataset == "imagenet":
         root = "/datashare/ImageNet/ILSVRC2012"
         meta_path = "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/data/ImageNet"
-        return ImageNet(
-            root=root,
-            split=split,
-            dst_meta_path=meta_path,
-            transform=None,
+        label_decoder = IntField()
+        return (
+            ImageNet(
+                root=root,
+                split=split,
+                dst_meta_path=meta_path,
+                transform=None,
+            ),
+            label_decoder,
         )
 
     elif dataset == "lamem":
@@ -73,10 +77,15 @@ def get_dataset(dataset: str, split: str):
         else:
             splits = test_splits
 
-        return LaMem(
-            root=root,
-            splits=splits,
-            transforms=None,
+        label_decoder = FloatField()
+
+        return (
+            LaMem(
+                root=root,
+                splits=splits,
+                transforms=None,
+            ),
+            label_decoder,
         )
 
     return ValueError(f"Wrong {dataset} has been prompted.")
@@ -105,10 +114,11 @@ def main(
     write_mode,
     compress_probability,
 ):
-    my_dataset = get_dataset(dataset=dataset, split=split)
+    my_dataset, label_decoder = get_dataset(dataset=dataset, split=split)
     if subset > 0:
         my_dataset = Subset(my_dataset, range(subset))
-
+        print(f"{len(my_dataset) =}")
+    print("here")
     # Pass a type for each data field
     writer = DatasetWriter(
         write_path,
@@ -119,7 +129,7 @@ def main(
                 compress_probability=compress_probability,
                 jpeg_quality=jpeg_quality,
             ),
-            "label": IntField(),
+            "label": label_decoder,
         },
         num_workers=num_workers,
     )

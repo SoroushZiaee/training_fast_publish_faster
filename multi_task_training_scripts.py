@@ -69,6 +69,23 @@ class BlurPoolConv2d(ch.nn.Module):
         return self.conv.forward(blurred)
 
 
+class MutiHeadModel(ch.nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+        num_features = model.fc.out_features
+
+        self.regression = ch.nn.Sequential(
+            ch.nn.Linear(num_features, 1), ch.nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        clf_out = self.model(x)
+        reg_out = self.regression(clf_out)
+
+        return clf_out, reg_out
+
+
 class MeanScalarMetric(torchmetrics.Metric):
     # Necessity: Ensures that the mean calculation works correctly in a distributed training setup, where metrics need to be aggregated across multiple devices.
 
@@ -91,7 +108,6 @@ class ImageNetTrainer:
         self.gpu = gpu
         self.config = config
         self.uid = str(uuid4())
-        self.epoch = 0
 
         if self.config["distributed"]:
             self.setup_distributed()
@@ -105,13 +121,6 @@ class ImageNetTrainer:
             print("loading model and optimizers...")
         self.model, self.scaler = self.create_model_and_scaler()
         self.create_optimizer()
-
-        if self.config["checkpoint"]:
-            checkpoint = ch.load(self.config["checkpoint"])
-            self.model.load_state_dict(checkpoint["model_state_dict"])
-            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-            self.epoch = checkpoint["epoch"]
-            print(f"Model is loaded from the checkpoint.")
 
         if verbose:
             print("init loggers...")
@@ -260,7 +269,7 @@ class ImageNetTrainer:
         epochs = self.config["epochs"]
         log_level = self.config["log_level"]
 
-        for epoch in range(self.epoch, epochs):
+        for epoch in range(epochs):
             res = self.get_resolution(epoch)
             self.decoder.output_size = (res, res)
             train_loss = self.train_loop(epoch)
@@ -307,7 +316,6 @@ class ImageNetTrainer:
         arch = self.config["arch"]
         weights = self.config["weights"]
         use_blurpool = self.config["use_blurpool"]
-        checkpoint = self.config["checkpoint"]
 
         model = getattr(models, arch)(weights=weights)
 
@@ -597,7 +605,6 @@ def main():
         "label_smoothing": 0.1,
         "distributed": 1,
         "use_blurpool": 1,
-        "checkpoint": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/aa43d53a-6c1a-4ca0-b9e5-b33c4b2d2f9a/checkpoint_epoch_70_0.64.pth",
         "world_size": 4,
         "address": "localhost",
         "port": "12355",

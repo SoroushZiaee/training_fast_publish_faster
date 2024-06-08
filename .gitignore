@@ -166,3 +166,5 @@ log
 *.err
 *.out
 *.pth
+*.pt
+*.png

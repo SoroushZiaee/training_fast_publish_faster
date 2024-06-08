@@ -597,7 +597,7 @@ def main():
         "label_smoothing": 0.1,
         "distributed": 1,
         "use_blurpool": 1,
-        "checkpoint": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/aa43d53a-6c1a-4ca0-b9e5-b33c4b2d2f9a/checkpoint_epoch_70_0.64.pth",
+        "checkpoint": None,
         "world_size": 4,
         "address": "localhost",
         "port": "12355",

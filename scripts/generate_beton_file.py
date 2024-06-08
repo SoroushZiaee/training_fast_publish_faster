@@ -1,5 +1,6 @@
 import sys
 import os
+from typing import List
 
 # Add the parent directory to the Python path
 script_dir = os.path.dirname(__file__)  # Get the directory where the script is located
@@ -7,7 +8,7 @@ parent_dir = os.path.dirname(script_dir)  # Get the parent directory
 sys.path.append(parent_dir)
 
 from ffcv.writer import DatasetWriter
-from ffcv.fields import RGBImageField, IntField, FloatField
+from ffcv.fields import RGBImageField, IntField, FloatField, NDArrayField
 
 from torch.utils.data import Subset
 
@@ -20,6 +21,13 @@ from fastargs.validation import And, OneOf
 from fastargs.decorators import param, section
 from fastargs import get_current_config
 
+from torchvision import transforms
+import PIL.Image
+import numpy as np
+from torch.utils.data import Dataset
+import pandas as pd
+import torch
+from tqdm import tqdm
 
 Section("cfg", "arguments to give the writer").params(
     dataset=Param(
@@ -41,6 +49,48 @@ Section("cfg", "arguments to give the writer").params(
     subset=Param(int, "How many images to use (-1 for all)", default=-1),
     compress_probability=Param(float, "compress probability", default=None),
 )
+
+
+class LaMem(Dataset):
+
+    def __init__(self, root: str, splits: List[str], transforms=None):
+
+        self.mem_frame = pd.concat(
+            [
+                pd.read_csv(
+                    os.path.join(root, "splits", split),
+                    delimiter=",",
+                )
+                for split in splits
+            ],
+            axis=0,
+        )
+        self.mem_frame["transormed_name"] = self.mem_frame["image_name"].str.replace(
+            ".jpg", ".npy", regex=False
+        )
+        self.transforms = transforms
+        self.images_path = os.path.join(root, "tranformed_images")
+
+    def __len__(self):
+        return len(self.mem_frame)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        img_name = os.path.join(
+            self.images_path, self.mem_frame["transormed_name"][idx]
+        )
+        # image = torch.load(img_name)
+        image = np.load(img_name, allow_pickle=True)
+        mem_score = self.mem_frame["memo_score"][idx]
+        target = float(mem_score)
+        target = torch.tensor(target)
+
+        if self.transforms:
+            image = self.transforms(image)
+
+        return image, target
 
 
 def get_dataset(dataset: str, split: str):
@@ -76,6 +126,23 @@ def get_dataset(dataset: str, split: str):
             splits = val_splits
         else:
             splits = test_splits
+
+        mean = np.load(
+            "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/datasets/LaMem/support_files/image_mean.npy"
+        )
+
+        # transforms_list = transforms.Compose(
+        #     [
+        #         transforms.Resize((256, 256), PIL.Image.BILINEAR),
+        #         lambda x: np.array(x),
+        #         lambda x: np.subtract(
+        #             x[:, :, [2, 1, 0]], mean
+        #         ),  # Subtract average mean from image (opposite order channels)
+        #         # transforms.ToTensor(),
+        #         # transforms.CenterCrop(desired_image_size),  # Center crop to 224x224
+        #         lambda x: x.astype(np.uint8),
+        #     ]
+        # )
 
         label_decoder = FloatField()
 
@@ -115,19 +182,46 @@ def main(
     compress_probability,
 ):
     my_dataset, label_decoder = get_dataset(dataset=dataset, split=split)
+
+    img, lbl = my_dataset[0]
+
+    # print(f"{img.shape = }")
+    # print(f"{lbl = }")
+
     if subset > 0:
         my_dataset = Subset(my_dataset, range(subset))
         print(f"{len(my_dataset) =}")
     print("here")
+    
+    # for i in tqdm(range(0,len(my_dataset))):
+    #     try:
+    #         img, lbl = my_dataset[i]
+        
+    #     except Exception as e:
+    #         print(f"{e}")
+    #         print(f"{i}: {img.shape}")
+    
     # Pass a type for each data field
+    # writer = DatasetWriter(
+    #     write_path,
+    #     {
+    #         "image": RGBImageField(
+    #             write_mode=write_mode,
+    #             max_resolution=max_resolution,
+    #             compress_probability=compress_probability,
+    #             jpeg_quality=jpeg_quality,
+    #         ),
+    #         "label": label_decoder,
+    #     },
+    #     num_workers=num_workers,
+    # )
+    
     writer = DatasetWriter(
         write_path,
         {
-            "image": RGBImageField(
-                write_mode=write_mode,
-                max_resolution=max_resolution,
-                compress_probability=compress_probability,
-                jpeg_quality=jpeg_quality,
+            "image": NDArrayField(
+                dtype=img.dtype,
+                shape=img.shape
             ),
             "label": label_decoder,
         },
@@ -146,3 +240,12 @@ if __name__ == "__main__":
     config.validate(mode="stderr")
     config.summary()
     main()
+
+# python /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/scripts/generate_beton_file.py \
+#         --cfg.dataset=lamem \
+#         --cfg.split=train \
+#         --cfg.write_path=. \
+#         --cfg.max_resolution=256 \
+#         --cfg.write_mode=proportion \
+#         --cfg.compress_probability=0.5 \
+#         --cfg.jpeg_quality=90

@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=LaMem_training
-#SBATCH --output=LaMem_training.out
-#SBATCH --error=LaMem_training.err
+#SBATCH --job-name=LaMem_training_vgg19
+#SBATCH --output=LaMem_training_vgg19.out
+#SBATCH --error=LaMem_training_vgg19.err
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=30
 #SBATCH --time=48:00:00
-#SBATCH --gres=gpu:t4:4
+#SBATCH --gres=gpu:a100:4
 #SBATCH --mem=50G
 #SBATCH --mail-type=BEGIN,END,FAIL # Send email on job BEGIN, END and FAIL
 #SBATCH --mail-user=soroush1@yorku.ca
@@ -26,7 +26,7 @@ for batch_size in "${batch_sizes[@]}"; do
         --data.in_memory=1 \
         --data.num_workers=30 \
         --dist.world_size=4 \
-        --logging.folder=./alexnet_logs \
+        --logging.folder=./vgg16_logs \
         --logging.log_level=1 \
         --lr.lr_schedule_type=steplr \
         --lr.lr_step_size=30 \
@@ -35,7 +35,7 @@ for batch_size in "${batch_sizes[@]}"; do
         --lr.lr_warmup_method=linear \
         --lr.lr_warmup_decay=0.01 \
         --lr.lr=${learning_rate} \
-        --model.arch=alexnet \
+        --model.arch=vgg16 \
         --resolution.min_res=160 \
         --resolution.max_res=192 \
         --resolution.end_ramp=13 \

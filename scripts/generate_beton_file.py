@@ -219,7 +219,7 @@ def main(
     writer = DatasetWriter(
         write_path,
         {
-            "image": NDArrayField(
+            "covariate": NDArrayField(
                 dtype=img.dtype,
                 shape=img.shape
             ),

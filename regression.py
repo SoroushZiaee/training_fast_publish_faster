@@ -7,6 +7,8 @@ import torch.distributed as dist
 ch.backends.cudnn.benchmark = True
 ch.autograd.profiler.emit_nvtx(False)
 ch.autograd.profiler.profile(False)
+# Enable anomaly detection
+ch.autograd.set_detect_anomaly(True)
 
 from torchvision import models
 import torchmetrics
@@ -35,12 +37,14 @@ from ffcv.transforms import (
     NormalizeImage,
     RandomHorizontalFlip,
     ToTorchImage,
+    Convert,
 )
 from ffcv.fields.rgb_image import (
     CenterCropRGBImageDecoder,
     RandomResizedCropRGBImageDecoder,
 )
-from ffcv.fields.basics import IntDecoder
+from ffcv.fields.basics import IntDecoder, FloatDecoder
+from ffcv.fields.decoders import NDArrayDecoder
 
 Section("model", "model details").params(
     arch=Param(And(str, OneOf(models.__dir__())), default="resnet18"),
@@ -52,6 +56,7 @@ Section("resolution", "resolution scheduling").params(
     max_res=Param(int, "the maximum (starting) resolution", default=160),
     end_ramp=Param(int, "when to stop interpolating resolution", default=0),
     start_ramp=Param(int, "when to start interpolating resolution", default=0),
+    fix_res=Param(int, "using fix resolution or not", default=0),
 )
 
 Section("data", "data related stuff").params(
@@ -150,6 +155,65 @@ class BlurPoolConv2d(ch.nn.Module):
         return self.conv.forward(blurred)
 
 
+class RegressionModel(ch.nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        # model = self.modified_inplace_problem(model)
+        out_features = self.get_last_layer_features(model)
+        self.model = model
+        self.regression_layer = ch.nn.Sequential(
+            ch.nn.Linear(
+                out_features, 1
+            ),  # Adjust this if your final layer is different
+            ch.nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        x = self.model(x)
+        x = self.regression_layer(x)
+        x = x.squeeze()
+        return x
+
+    @staticmethod
+    # Adjust model to avoid in-place operations
+    def modified_inplace_problem(model):
+        # Collect modules that need modification
+        modules_to_modify = []
+        for name, module in model.named_modules():
+            if isinstance(module, ch.nn.ReLU) and module.inplace:
+                modules_to_modify.append((name, module))
+
+        # Apply modifications
+        for name, module in modules_to_modify:
+            parent_module = model
+            name_parts = name.split(".")
+            for part in name_parts[:-1]:
+                parent_module = getattr(parent_module, part)
+            setattr(parent_module, name_parts[-1], ch.nn.ReLU(inplace=False))
+
+        return model
+
+    @staticmethod
+    def get_last_layer_features(model: ch.nn.Module) -> int:
+        """
+        Get the number of input features for the last linear layer of the model.
+
+        Args:
+            model (nn.Module): The neural network model.
+
+        Returns:
+            int: The number of input features for the last linear layer.
+        """
+        for layer in reversed(list(model.children())):
+            if isinstance(layer, ch.nn.Sequential):
+                for sub_layer in reversed(list(layer.children())):
+                    if isinstance(sub_layer, ch.nn.Linear):
+                        return sub_layer.out_features
+            elif isinstance(layer, ch.nn.Linear):
+                return layer.out_features
+        raise ValueError("No linear layer found in the model")
+
+
 class ImageNetTrainer:
     @param("training.distributed")
     def __init__(self, gpu, distributed):
@@ -187,6 +251,15 @@ class ImageNetTrainer:
 
         return lr_schedules[lr_schedule_type](epoch)
 
+    @param("training.task")
+    @param("training.label_smoothing")
+    def get_loss(self, task, label_smoothing):
+        if task == "clf":
+            return ch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+        elif task == "reg":
+            return ch.nn.MSELoss()
+
     # resolution tools
     @param("resolution.min_res")
     @param("resolution.max_res")
@@ -206,13 +279,25 @@ class ImageNetTrainer:
         final_res = int(np.round(interp[0] / 32)) * 32
         return final_res
 
+    @staticmethod
+    def custom_print(title: str, text):
+        print("+" * 20 + f"{title}" + "+" * 20)
+        print(f"{text}")
+        print("+" * 60)
+
     @param("lr.lr")
     @param("training.momentum")
     @param("training.optimizer")
     @param("training.weight_decay")
     @param("training.label_smoothing")
-    def create_optimizer(self, lr, momentum, optimizer, weight_decay, label_smoothing):
+    @param("training.task")
+    def create_optimizer(
+        self, lr, momentum, optimizer, weight_decay, label_smoothing, task
+    ):
         assert optimizer == "sgd"
+
+        self.custom_print("lr", lr)
+        self.custom_print("weight decay", weight_decay)
 
         # Only do weight decay on non-batchnorm parameters
         all_params = list(self.model.named_parameters())
@@ -224,7 +309,9 @@ class ImageNetTrainer:
         ]
 
         self.optimizer = ch.optim.SGD(param_groups, lr=lr, momentum=momentum)
-        self.loss = ch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+        self.loss = self.get_loss()
+        self.custom_print("Loss", type(self.loss))
 
     @param("lr.lr_schedule_type")
     @param("lr.lr_step_size")
@@ -266,6 +353,107 @@ class ImageNetTrainer:
 
         self.scheduler = lr_scheduler
 
+    @param("training.task")
+    @param("validation.resolution")
+    def get_image_pipeline(self, task, resolution: int = 256, stage: str = "train"):
+        this_device = f"cuda:{self.gpu}"
+        self.custom_print("device", this_device)
+        if stage == "train":
+            if task == "clf":
+                res = self.get_resolution(epoch=0)
+                self.decoder = RandomResizedCropRGBImageDecoder((res, res))
+                return [
+                    self.decoder,
+                    RandomHorizontalFlip(),
+                    ToTensor(),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                    ToTorchImage(),
+                    NormalizeImage(IMAGENET_MEAN, IMAGENET_STD, np.float16),
+                ]
+
+            elif task == "reg":
+                return [
+                    NDArrayDecoder(),
+                    RandomHorizontalFlip(),
+                    ToTensor(),
+                    ToTorchImage(channels_last=False),
+                    Convert(ch.float16),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                ]
+
+        elif stage == "val":
+            if task == "clf":
+                res_tuple = (resolution, resolution)
+                cropper = CenterCropRGBImageDecoder(res_tuple, ratio=DEFAULT_CROP_RATIO)
+                return [
+                    cropper,
+                    ToTensor(),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                    ToTorchImage(),
+                    NormalizeImage(IMAGENET_MEAN, IMAGENET_STD, np.float16),
+                ]
+
+            elif task == "reg":
+                return [
+                    NDArrayDecoder(),
+                    RandomHorizontalFlip(),
+                    ToTensor(),
+                    ToTorchImage(channels_last=False),
+                    Convert(ch.float16),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                ]
+
+    @param("training.task")
+    def get_label_pipeline(self, task, stage: str = "train"):
+        this_device = f"cuda:{self.gpu}"
+        if stage == "train":
+            if task == "clf":
+                return [
+                    IntDecoder(),
+                    ToTensor(),
+                    Squeeze(),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                ]
+
+            elif task == "reg":
+                return [
+                    FloatDecoder(),
+                    ToTensor(),
+                    Squeeze(),
+                    Convert(ch.float16),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                ]
+
+        elif stage == "val":
+            if task == "clf":
+                return [
+                    IntDecoder(),
+                    ToTensor(),
+                    Squeeze(),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                ]
+
+            elif task == "reg":
+                return [
+                    FloatDecoder(),
+                    ToTensor(),
+                    Squeeze(),
+                    Convert(ch.float16),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                ]
+
+    @param("training.task")
+    def get_pipeline(self, task, stage: str = "train"):
+        if task == "clf":
+            image_pipeline: List[Operation] = self.get_image_pipeline(stage=stage)
+            label_pipeline: List[Operation] = self.get_label_pipeline(stage=stage)
+            return {"image": image_pipeline, "label": label_pipeline}
+
+        elif task == "reg":
+            image_pipeline: List[Operation] = self.get_image_pipeline(stage=stage)
+            label_pipeline: List[Operation] = self.get_label_pipeline(stage=stage)
+            return {"covariate": image_pipeline, "label": label_pipeline}
+
     @param("data.train_dataset")
     @param("data.num_workers")
     @param("training.batch_size")
@@ -274,27 +462,14 @@ class ImageNetTrainer:
     def create_train_loader(
         self, train_dataset, num_workers, batch_size, distributed, in_memory
     ):
+        self.custom_print("batch size", batch_size)
         this_device = f"cuda:{self.gpu}"
         train_path = Path(train_dataset)
         assert train_path.is_file()
 
-        res = self.get_resolution(epoch=0)
-        self.decoder = RandomResizedCropRGBImageDecoder((res, res))
-        image_pipeline: List[Operation] = [
-            self.decoder,
-            RandomHorizontalFlip(),
-            ToTensor(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-            ToTorchImage(),
-            NormalizeImage(IMAGENET_MEAN, IMAGENET_STD, np.float16),
-        ]
+        pipeline = self.get_pipeline(stage="train")
 
-        label_pipeline: List[Operation] = [
-            IntDecoder(),
-            ToTensor(),
-            Squeeze(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-        ]
+        self.custom_print("train pipeline", pipeline)
 
         order = OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM
         loader = Loader(
@@ -303,8 +478,8 @@ class ImageNetTrainer:
             num_workers=num_workers,
             order=order,
             os_cache=in_memory,
-            drop_last=True,
-            pipelines={"image": image_pipeline, "label": label_pipeline},
+            drop_last=False,
+            pipelines=pipeline,
             distributed=distributed,
         )
 
@@ -321,41 +496,34 @@ class ImageNetTrainer:
         this_device = f"cuda:{self.gpu}"
         val_path = Path(val_dataset)
         assert val_path.is_file()
-        res_tuple = (resolution, resolution)
-        cropper = CenterCropRGBImageDecoder(res_tuple, ratio=DEFAULT_CROP_RATIO)
-        image_pipeline = [
-            cropper,
-            ToTensor(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-            ToTorchImage(),
-            NormalizeImage(IMAGENET_MEAN, IMAGENET_STD, np.float16),
-        ]
 
-        label_pipeline = [
-            IntDecoder(),
-            ToTensor(),
-            Squeeze(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-        ]
+        pipeline = self.get_pipeline(stage="val")
 
+        self.custom_print("val pipeline", pipeline)
+
+        # covariate
         loader = Loader(
             val_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
             order=OrderOption.SEQUENTIAL,
             drop_last=False,
-            pipelines={"image": image_pipeline, "label": label_pipeline},
+            pipelines=pipeline,
             distributed=distributed,
         )
         return loader
 
     @param("training.epochs")
     @param("logging.log_level")
-    def train(self, epochs, log_level):
+    @param("training.task")
+    def train(self, epochs, log_level, task):
         for epoch in range(epochs):
-            res = self.get_resolution(epoch)
-            self.decoder.output_size = (res, res)
+            if task == "clf":
+                res = self.get_resolution(epoch)
+                self.decoder.output_size = (res, res)
+
             train_loss = self.train_loop(epoch)
+            # self.custom_print("train loss", train_loss)
 
             if log_level > 0:
                 extra_dict = {"train_loss": train_loss, "epoch": epoch}
@@ -368,6 +536,23 @@ class ImageNetTrainer:
         if self.gpu == 0:
             ch.save(self.model.state_dict(), self.log_folder / "final_weights.pt")
 
+    @param("training.task")
+    def prepare_stat_dict(self, task, stats, val_time):
+        if task == "clf":
+            return {
+                "current_lr": self.optimizer.param_groups[0]["lr"],
+                "top_1": stats["top_1"],
+                "top_5": stats["top_5"],
+                "val_time": val_time,
+            }
+
+        elif task == "reg":
+            return {
+                "current_lr": self.optimizer.param_groups[0]["lr"],
+                "loss": stats["loss"],
+                "val_time": val_time,
+            }
+
     def eval_and_log(self, extra_dict={}):
         start_val = time.time()
         stats = self.val_loop()
@@ -375,12 +560,7 @@ class ImageNetTrainer:
         if self.gpu == 0:
             self.log(
                 dict(
-                    {
-                        "current_lr": self.optimizer.param_groups[0]["lr"],
-                        "top_1": stats["top_1"],
-                        "top_5": stats["top_5"],
-                        "val_time": val_time,
-                    },
+                    self.prepare_stat_dict(stats=stats, val_time=val_time),
                     **extra_dict,
                 )
             )
@@ -395,6 +575,8 @@ class ImageNetTrainer:
     def create_model_and_scaler(self, arch, distributed, use_blurpool, task):
         scaler = GradScaler()
         model = getattr(models, arch)(pretrained=None)
+        # models.alexnet(pretrained=)
+        self.custom_print("model", model)
 
         def apply_blurpool(mod: ch.nn.Module):
             for name, child in mod.named_children():
@@ -405,8 +587,16 @@ class ImageNetTrainer:
                 else:
                     apply_blurpool(child)
 
+        def apply_regression(model):
+            return RegressionModel(model)
+
         if use_blurpool:
             apply_blurpool(model)
+
+        if task == "reg":
+            model = apply_regression(model)
+
+        self.custom_print("model", model)
 
         model = model.to(memory_format=ch.channels_last)
         model = model.to(self.gpu)
@@ -427,19 +617,42 @@ class ImageNetTrainer:
         # lrs = np.interp(np.arange(iters), [0, iters], [lr_start, lr_end])
 
         iterator = tqdm(self.train_loader)
+
         for ix, (images, target) in enumerate(iterator):
+            # print(f"{images.device = }")
+            # print(f"{target.device = }")
+
             ### Training start
             # for param_group in self.optimizer.param_groups:
             #     param_group["lr"] = lrs[ix]
 
+            # self.custom_print("image shape", images.shape)
+            # self.custom_print("target shape", target.shape)
+
             self.optimizer.zero_grad(set_to_none=True)
             with autocast():
-                output = self.model(images)
-                loss_train = self.loss(output, target)
+                # self.custom_print("image device", images.device)
+                # self.custom_print("label device", target.device)
+                # self.custom_print("model device", self.model.device)
 
-            self.scaler.scale(loss_train).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+                output = self.model(images)
+                # self.custom_print("output shape", output.size())
+                # self.custom_print("output dtype", output.dtype)
+                # self.custom_print("target dtype", target.dtype)
+
+                loss_train = self.loss(output, target)
+                # self.custom_print("loss train", loss_train)
+                # self.custom_print("loss train type", loss_train.dtype)
+
+            # self.scaler.scale(loss_train).backward()
+            # self.scaler.step(self.optimizer)
+            # self.scaler.update()
+
+            # Backward pass
+            loss_train.backward()
+
+            # Optimizer step
+            self.optimizer.step()
             ### Training end
 
             ### Logging start
@@ -466,7 +679,8 @@ class ImageNetTrainer:
             return loss.item()
 
     @param("validation.lr_tta")
-    def val_loop(self, lr_tta):
+    @param("training.task")
+    def val_loop(self, lr_tta, task):
         model = self.model
         model.eval()
 
@@ -477,8 +691,9 @@ class ImageNetTrainer:
                     if lr_tta:
                         output += self.model(ch.flip(images, dims=[3]))
 
-                    for k in ["top_1", "top_5"]:
-                        self.val_meters[k](output, target)
+                    if task == "clf":
+                        for k in ["top_1", "top_5"]:
+                            self.val_meters[k](output, target)
 
                     loss_val = self.loss(output, target)
                     self.val_meters["loss"](loss_val)
@@ -487,13 +702,28 @@ class ImageNetTrainer:
         [meter.reset() for meter in self.val_meters.values()]
         return stats
 
+    @param("training.task")
+    def get_val_meters(self, task):
+        if task == "clf":
+            return {
+                "top_1": torchmetrics.Accuracy(num_classes=1000).to(self.gpu),
+                "top_5": torchmetrics.Accuracy(
+                    num_classes=1000,
+                    top_k=5,
+                ).to(self.gpu),
+                "loss": MeanScalarMetric().to(self.gpu),
+            }
+
+        elif task == "reg":
+            return {
+                "loss": MeanScalarMetric().to(self.gpu),
+            }
+
     @param("logging.folder")
     def initialize_logger(self, folder):
-        self.val_meters = {
-            "top_1": torchmetrics.Accuracy(num_classes=1000).to(self.gpu),
-            "top_5": torchmetrics.Accuracy(num_classes=1000, top_k=5).to(self.gpu),
-            "loss": MeanScalarMetric().to(self.gpu),
-        }
+        self.val_meters = self.get_val_meters()
+
+        self.custom_print("metric", self.val_meters)
 
         if self.gpu == 0:
             folder = (Path(folder) / str(self.uid)).absolute()
@@ -533,27 +763,32 @@ class ImageNetTrainer:
     @param("dist.world_size")
     def launch_from_args(cls, distributed, world_size):
         if distributed:
-            ch.multiprocessing.spawn(cls._exec_wrapper, nprocs=world_size, join=True)
+            ch.multiprocessing.spawn(
+                cls._exec_wrapper,
+                nprocs=world_size,
+                join=True,
+            )
         else:
             cls.exec(0)
 
     @classmethod
     def _exec_wrapper(cls, *args, **kwargs):
-        make_config(
-            config_file="/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/configs/vgg16.yaml",
-            quiet=True,
-        )
+        make_config(quiet=True)
         cls.exec(*args, **kwargs)
 
     @classmethod
     @param("training.distributed")
     @param("training.eval_only")
     def exec(cls, gpu, distributed, eval_only):
+        print(f"{distributed = }")
+        print(f"{eval_only = }")
+
         trainer = cls(gpu=gpu)
         if eval_only:
             trainer.eval_and_log()
         else:
             trainer.train()
+            # print(f"everything is good.")
 
         if distributed:
             trainer.cleanup_distributed()
@@ -576,22 +811,16 @@ class MeanScalarMetric(torchmetrics.Metric):
 
 
 # Running
-def make_config(config_file: str, quiet=False):
+def make_config(quiet=False):
     config = get_current_config()
-    # parser = ArgumentParser(description="Fast imagenet training")
-    # config.augment_argparse(parser)
-    # config.collect_argparse_args(parser)
-    config.collect_config_file(config_file)
+    parser = ArgumentParser(description="Fast imagenet training")
+    config.augment_argparse(parser)
+    config.collect_argparse_args(parser)
     config.validate(mode="stderr")
     if not quiet:
         config.summary()
 
 
 if __name__ == "__main__":
-    # parser = ArgumentParser(description="Fast imagenet training")
-    # parser.add_argument("config_file", type=str, help="Path to the config file")
-    # args = parser.parse_args()
-    make_config(
-        config_file="/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/configs/vgg16.yaml"
-    )
+    make_config(quiet=False)
     ImageNetTrainer.launch_from_args()

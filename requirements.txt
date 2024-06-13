@@ -1,6 +1,6 @@
 torch==1.12.0+computecanada
-torchvision==0.11.1
-torchmetrics==0.5.1
+torchvision==0.13.0+computecanada
+torchmetrics==0.7.3
 numba==0.58.0+computecanada
 tqdm==4.66.4+computecanada
 fastargs==1.2.0+computecanada

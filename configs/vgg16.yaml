@@ -8,6 +8,7 @@ dist:
 logging:
   folder: ./vgg16_logs
   log_level: 1
+  every_n_epochs: 5
 lr:
   lr_schedule_type: steplr
   lr_step_size: 30

@@ -77,6 +77,8 @@ Section("lr", "lr scheduling").params(
 Section("logging", "how to log stuff").params(
     folder=Param(str, "log location", required=True),
     log_level=Param(int, "0 if only at end 1 otherwise", default=1),
+    every_n_epochs=Param(int, "0 if only at end 1 otherwise", default=5),
+    
 )
 
 Section("validation", "Validation parameters stuff").params(
@@ -368,7 +370,8 @@ class ImageNetTrainer:
         if self.gpu == 0:
             ch.save(self.model.state_dict(), self.log_folder / "final_weights.pt")
 
-    def eval_and_log(self, extra_dict={}):
+    @param("logging.every_n_epochs")
+    def eval_and_log(self, epoch: int = 0, every_n_epochs: int = 5, extra_dict={}):
         start_val = time.time()
         stats = self.val_loop()
         val_time = time.time() - start_val
@@ -384,6 +387,16 @@ class ImageNetTrainer:
                     **extra_dict,
                 )
             )
+            
+        if self.gpu == 0:
+            if epoch % every_n_epochs == 0:
+                save_model_checkpoint(
+                    self.model,
+                    self.optimizer,
+                    epoch,
+                    self.model_ckpt_path,
+                    metric_value=stats["top_1"],
+                )
 
         return stats
 
@@ -488,7 +501,8 @@ class ImageNetTrainer:
         return stats
 
     @param("logging.folder")
-    def initialize_logger(self, folder):
+    @param("logging.model_ckpt_path")
+    def initialize_logger(self, folder, model_ckpt_path):
         self.val_meters = {
             "top_1": torchmetrics.Accuracy(num_classes=1000).to(self.gpu),
             "top_5": torchmetrics.Accuracy(num_classes=1000, top_k=5).to(self.gpu),
@@ -496,6 +510,9 @@ class ImageNetTrainer:
         }
 
         if self.gpu == 0:
+            self.model_ckpt_path = create_version_dir(
+                model_ckpt_path, str(self.uid)
+            )
             folder = (Path(folder) / str(self.uid)).absolute()
             folder.mkdir(parents=True)
 
@@ -576,15 +593,58 @@ class MeanScalarMetric(torchmetrics.Metric):
 
 
 # Running
-def make_config(config_file: str, quiet=False):
+def make_config(quiet=False):
     config = get_current_config()
-    # parser = ArgumentParser(description="Fast imagenet training")
-    # config.augment_argparse(parser)
-    # config.collect_argparse_args(parser)
-    config.collect_config_file(config_file)
+    parser = ArgumentParser(description="Fast imagenet training")
+    config.augment_argparse(parser)
+    config.collect_argparse_args(parser)
     config.validate(mode="stderr")
     if not quiet:
         config.summary()
+        
+def save_model_checkpoint(model, optimizer, epoch, version_dir, metric_value):
+    """
+    Save the model checkpoint with an incremented version number.
+
+    Parameters:
+    model (nn.Module): The model to save.
+    optimizer (optim.Optimizer): The optimizer state to save.
+    epoch (int): The current epoch number.
+    version_dir (str): The version directory where checkpoints will be saved.
+    """
+    checkpoint_path = os.path.join(
+        version_dir, f"checkpoint_epoch_{epoch}_{metric_value:.2f}.pth"
+    )
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+
+    ch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        },
+        checkpoint_path,
+    )
+
+    print(f"Model checkpoint saved to: {checkpoint_path}")
+    
+
+def create_version_dir(base_dir, uuid):
+    """
+    Create a new version directory.
+
+    Parameters:
+    base_dir (str): The base directory where versions are stored.
+
+    Returns:
+    str: The path to the new version directory.
+    """
+    # next_version = get_next_version(base_dir)
+    version_dir = os.path.join(base_dir, uuid)
+    os.makedirs(version_dir, exist_ok=True)
+
+    print(f"Created version directory: {version_dir}")
+    return version_dir
 
 
 if __name__ == "__main__":

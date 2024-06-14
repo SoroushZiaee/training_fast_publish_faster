@@ -52,6 +52,7 @@ Section("resolution", "resolution scheduling").params(
     max_res=Param(int, "the maximum (starting) resolution", default=160),
     end_ramp=Param(int, "when to stop interpolating resolution", default=0),
     start_ramp=Param(int, "when to start interpolating resolution", default=0),
+    fix_res=Param(int, "using fix resolution or not", default=0),
 )
 
 Section("data", "data related stuff").params(
@@ -64,7 +65,7 @@ Section("data", "data related stuff").params(
 Section("lr", "lr scheduling").params(
     step_ratio=Param(float, "learning rate step ratio", default=0.1),
     step_length=Param(int, "learning rate step length", default=30),
-    lr_schedule_type=Param(OneOf(["step", "cyclic", "steplr"]), default="cyclic"),
+    lr_schedule_type=Param(OneOf(["steplr"]), default="cyclic"),
     lr_step_size=Param(int, "learning rate step length", default=30),
     lr_gamma=Param(float, "learning rate", default=0.1),
     lr_warmup_epochs=Param(int, "learning rate step length", default=0),
@@ -78,6 +79,7 @@ Section("logging", "how to log stuff").params(
     folder=Param(str, "log location", required=True),
     log_level=Param(int, "0 if only at end 1 otherwise", default=1),
     every_n_epochs=Param(int, "0 if only at end 1 otherwise", default=5),
+    model_ckpt_path=Param(str, "model checkpoint path", required=True),
     
 )
 
@@ -194,7 +196,11 @@ class ImageNetTrainer:
     @param("resolution.max_res")
     @param("resolution.end_ramp")
     @param("resolution.start_ramp")
-    def get_resolution(self, epoch, min_res, max_res, end_ramp, start_ramp):
+    @param("resolution.fix_res")
+    def get_resolution(self, epoch, min_res, max_res, end_ramp, start_ramp, fix_res):
+        if fix_res > 0:
+            return fix_res
+
         assert min_res <= max_res
 
         if epoch <= start_ramp:
@@ -243,7 +249,9 @@ class ImageNetTrainer:
         lr_warmup_epochs,
         lr_warmup_method,
         lr_warmup_decay,
+        
     ):
+        
         if lr_schedule_type == "steplr":
             main_lr_scheduler = ch.optim.lr_scheduler.StepLR(
                 optimizer, step_size=lr_step_size, gamma=lr_gamma
@@ -556,10 +564,7 @@ class ImageNetTrainer:
 
     @classmethod
     def _exec_wrapper(cls, *args, **kwargs):
-        make_config(
-            config_file="/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/configs/vgg16.yaml",
-            quiet=True,
-        )
+        make_config(quiet=True)
         cls.exec(*args, **kwargs)
 
     @classmethod
@@ -651,7 +656,5 @@ if __name__ == "__main__":
     # parser = ArgumentParser(description="Fast imagenet training")
     # parser.add_argument("config_file", type=str, help="Path to the config file")
     # args = parser.parse_args()
-    make_config(
-        config_file="/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/configs/vgg16.yaml"
-    )
+    make_config(quiet=False)
     ImageNetTrainer.launch_from_args()

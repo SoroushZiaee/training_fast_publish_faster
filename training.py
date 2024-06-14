@@ -370,11 +370,11 @@ class ImageNetTrainer:
             if log_level > 0:
                 extra_dict = {"train_loss": train_loss, "epoch": epoch}
 
-                self.eval_and_log(extra_dict)
+                self.eval_and_log(epoch=epoch, extra_dict=extra_dict)
 
             self.scheduler.step()
 
-        self.eval_and_log({"epoch": epoch})
+        self.eval_and_log(extra_dict={"epoch": epoch})
         if self.gpu == 0:
             ch.save(self.model.state_dict(), self.log_folder / "final_weights.pt")
 

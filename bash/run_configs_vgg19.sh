@@ -12,3 +12,4 @@
 
 # Define arrays for batch sizes, learning rates, and weight decays
 srun /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/bash/training_vgg19.sh
+

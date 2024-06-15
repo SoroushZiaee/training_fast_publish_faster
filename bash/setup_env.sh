@@ -2,3 +2,10 @@
 
 # Set up the environment
 module load StdEnv/2020 python/3.9.6 ipykernel/2022a gcc/9.3.0 cuda/11.4 opencv/4.5.5 scipy-stack/2022a
+
+# Set up the virtual environment
+python -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+
+pip install -r requirements.txt

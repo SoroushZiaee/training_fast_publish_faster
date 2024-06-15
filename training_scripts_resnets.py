@@ -399,11 +399,8 @@ class ImageNetTrainer:
 
     def initialize_logger(self):
         self.val_meters = {
-            "top_1": torchmetrics.Accuracy(task="multiclass", num_classes=1000).to(
-                self.gpu
-            ),
+            "top_1": torchmetrics.Accuracy(num_classes=1000).to(self.gpu),
             "top_5": torchmetrics.Accuracy(
-                task="multiclass",
                 num_classes=1000,
                 top_k=5,
             ).to(self.gpu),
@@ -574,7 +571,7 @@ def main():
         "start_ramp": 65,
         "train_dataset": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_train_256.ffcv",
         "val_dataset": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_validation_256.ffcv",
-        "num_workers": 10,
+        "num_workers": 5,
         "in_memory": 1,
         "step_ratio": 0.1,
         "step_length": 30,

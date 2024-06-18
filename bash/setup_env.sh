@@ -9,3 +9,6 @@ source venv/bin/activate
 pip install --upgrade pip
 
 pip install -r requirements.txt
+
+echo "Give access to all users to the virtual environment"
+chmod -R 777 venv/

@@ -2,6 +2,7 @@ import torch as ch
 from torch.cuda.amp import GradScaler
 from torch.cuda.amp import autocast
 import torch.nn.functional as F
+from torchvision.transforms.functional import InterpolationMode
 import torch.distributed as dist
 
 ch.backends.cudnn.benchmark = True
@@ -9,6 +10,7 @@ ch.autograd.profiler.emit_nvtx(False)
 ch.autograd.profiler.profile(False)
 
 from torchvision import models
+import torchvision.transforms as T
 import torchmetrics
 import numpy as np
 from tqdm import tqdm
@@ -17,7 +19,7 @@ import os
 import time
 import json
 from uuid import uuid4
-from typing import List
+from typing import List, Optional, Tuple
 from pathlib import Path
 from argparse import ArgumentParser
 
@@ -65,13 +67,14 @@ Section("data", "data related stuff").params(
 Section("lr", "lr scheduling").params(
     step_ratio=Param(float, "learning rate step ratio", default=0.1),
     step_length=Param(int, "learning rate step length", default=30),
-    lr_schedule_type=Param(OneOf(["steplr"]), default="cyclic"),
+    lr_schedule_type=Param(OneOf(["steplr", "cosineannealinglr"]), default="cyclic"),
     lr_step_size=Param(int, "learning rate step length", default=30),
     lr_gamma=Param(float, "learning rate", default=0.1),
     lr_warmup_epochs=Param(int, "learning rate step length", default=0),
     lr_warmup_method=Param(OneOf(["linear"]), default="linear"),
     lr_warmup_decay=Param(float, "learning rate", default=0.01),
     lr=Param(float, "learning rate", default=0.5),
+    lr_min=Param(float, "learning rate", default=0.0),
     lr_peak_epoch=Param(int, "Epoch at which LR peaks", default=2),
 )
 
@@ -80,7 +83,6 @@ Section("logging", "how to log stuff").params(
     log_level=Param(int, "0 if only at end 1 otherwise", default=1),
     every_n_epochs=Param(int, "0 if only at end 1 otherwise", default=5),
     model_ckpt_path=Param(str, "model checkpoint path", required=True),
-    
 )
 
 Section("validation", "Validation parameters stuff").params(
@@ -96,10 +98,15 @@ Section("training", "training hyper param stuff").params(
     optimizer=Param(And(str, OneOf(["sgd"])), "The optimizer", default="sgd"),
     momentum=Param(float, "SGD momentum", default=0.9),
     weight_decay=Param(float, "weight decay", default=4e-5),
+    norm_weight_decay=Param(float, "norm_weight_decay", default=0.0),
+    bias_weight_decay=Param(float, "weight decay", default=None),
+    transformer_embedding_decay=Param(float, "weight decay", default=None),
     epochs=Param(int, "number of epochs", default=30),
     label_smoothing=Param(float, "label smoothing parameter", default=0.1),
     distributed=Param(int, "is distributed?", default=0),
     use_blurpool=Param(int, "use blurpool?", default=0),
+    auto_augment=Param(int, "use auto_augment?", default=0),
+    random_erase_prob=Param(float, "random erase prob", default=0.5),
 )
 
 Section("dist", "distributed training options").params(
@@ -132,6 +139,72 @@ def get_cyclic_lr(epoch, lr, epochs, lr_peak_epoch):
     xs = [0, lr_peak_epoch, epochs]
     ys = [1e-4 * lr, lr, 0]
     return np.interp([epoch], xs, ys)[0]
+
+
+def set_weight_decay(
+    model: ch.nn.Module,
+    weight_decay: float,
+    norm_weight_decay: Optional[float] = None,
+    norm_classes: Optional[List[type]] = None,
+    custom_keys_weight_decay: Optional[List[Tuple[str, float]]] = None,
+):
+    if not norm_classes:
+        norm_classes = [
+            ch.nn.modules.batchnorm._BatchNorm,
+            ch.nn.LayerNorm,
+            ch.nn.GroupNorm,
+            ch.nn.modules.instancenorm._InstanceNorm,
+            ch.nn.LocalResponseNorm,
+        ]
+    norm_classes = tuple(norm_classes)
+
+    params = {
+        "other": [],
+        "norm": [],
+    }
+    params_weight_decay = {
+        "other": weight_decay,
+        "norm": norm_weight_decay,
+    }
+    custom_keys = []
+    if custom_keys_weight_decay is not None:
+        for key, weight_decay in custom_keys_weight_decay:
+            params[key] = []
+            params_weight_decay[key] = weight_decay
+            custom_keys.append(key)
+
+    def _add_params(module, prefix=""):
+        for name, p in module.named_parameters(recurse=False):
+            if not p.requires_grad:
+                continue
+            is_custom_key = False
+            for key in custom_keys:
+                target_name = (
+                    f"{prefix}.{name}" if prefix != "" and "." in key else name
+                )
+                if key == target_name:
+                    params[key].append(p)
+                    is_custom_key = True
+                    break
+            if not is_custom_key:
+                if norm_weight_decay is not None and isinstance(module, norm_classes):
+                    params["norm"].append(p)
+                else:
+                    params["other"].append(p)
+
+        for child_name, child_module in module.named_children():
+            child_prefix = f"{prefix}.{child_name}" if prefix != "" else child_name
+            _add_params(child_module, prefix=child_prefix)
+
+    _add_params(model)
+
+    param_groups = []
+    for key in params:
+        if len(params[key]) > 0:
+            param_groups.append(
+                {"params": params[key], "weight_decay": params_weight_decay[key]}
+            )
+    return param_groups
 
 
 class BlurPoolConv2d(ch.nn.Module):
@@ -219,17 +292,50 @@ class ImageNetTrainer:
     @param("training.optimizer")
     @param("training.weight_decay")
     @param("training.label_smoothing")
-    def create_optimizer(self, lr, momentum, optimizer, weight_decay, label_smoothing):
+    @param("training.norm_weight_decay")
+    @param("training.bias_weight_decay")
+    @param("training.transformer_embedding_decay")
+    def create_optimizer(
+        self,
+        lr,
+        momentum,
+        optimizer,
+        weight_decay,
+        label_smoothing,
+        norm_weight_decay,
+        bias_weight_decay: float = None,
+        transformer_embedding_decay: float = None,
+    ):
         assert optimizer == "sgd"
 
+        custom_keys_weight_decay = []
+        if bias_weight_decay is not None:
+            custom_keys_weight_decay.append(("bias", bias_weight_decay))
+        if transformer_embedding_decay is not None:
+            for key in [
+                "class_token",
+                "position_embedding",
+                "relative_position_bias_table",
+            ]:
+                custom_keys_weight_decay.append((key, transformer_embedding_decay))
+
+        param_groups = set_weight_decay(
+            self.model,
+            weight_decay,
+            norm_weight_decay=norm_weight_decay,
+            custom_keys_weight_decay=(
+                custom_keys_weight_decay if len(custom_keys_weight_decay) > 0 else None
+            ),
+        )
+
         # Only do weight decay on non-batchnorm parameters
-        all_params = list(self.model.named_parameters())
-        bn_params = [v for k, v in all_params if ("bn" in k)]
-        other_params = [v for k, v in all_params if not ("bn" in k)]
-        param_groups = [
-            {"params": bn_params, "weight_decay": 0.0},
-            {"params": other_params, "weight_decay": weight_decay},
-        ]
+        # all_params = list(self.model.named_parameters())
+        # bn_params = [v for k, v in all_params if ("bn" in k)]
+        # other_params = [v for k, v in all_params if not ("bn" in k)]
+        # param_groups = [
+        #     {"params": bn_params, "weight_decay": 0.0},
+        #     {"params": other_params, "weight_decay": weight_decay},
+        # ]
 
         self.optimizer = ch.optim.SGD(param_groups, lr=lr, momentum=momentum)
         self.loss = ch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
@@ -240,6 +346,8 @@ class ImageNetTrainer:
     @param("lr.lr_warmup_epochs")
     @param("lr.lr_warmup_method")
     @param("lr.lr_warmup_decay")
+    @param("lr.lr_min")
+    @param("training.epochs")
     def create_scheduler(
         self,
         optimizer,
@@ -249,12 +357,23 @@ class ImageNetTrainer:
         lr_warmup_epochs,
         lr_warmup_method,
         lr_warmup_decay,
-        
+        lr_min,
+        epochs,
     ):
-        
+
         if lr_schedule_type == "steplr":
             main_lr_scheduler = ch.optim.lr_scheduler.StepLR(
                 optimizer, step_size=lr_step_size, gamma=lr_gamma
+            )
+
+        elif lr_schedule_type == "cosineannealinglr":
+            main_lr_scheduler = ch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=epochs - lr_warmup_epochs, eta_min=lr_min
+            )
+
+        elif lr_schedule_type == "exponentiallr":
+            main_lr_scheduler = ch.optim.lr_scheduler.ExponentialLR(
+                optimizer, gamma=lr_gamma
             )
 
         if lr_warmup_epochs > 0:
@@ -281,8 +400,17 @@ class ImageNetTrainer:
     @param("training.batch_size")
     @param("training.distributed")
     @param("data.in_memory")
+    @param("training.auto_augment")
+    @param("training.random_erase_prob")
     def create_train_loader(
-        self, train_dataset, num_workers, batch_size, distributed, in_memory
+        self,
+        train_dataset,
+        num_workers,
+        batch_size,
+        distributed,
+        in_memory,
+        auto_augment,
+        random_erase_prob,
     ):
         this_device = f"cuda:{self.gpu}"
         train_path = Path(train_dataset)
@@ -290,14 +418,26 @@ class ImageNetTrainer:
 
         res = self.get_resolution(epoch=0)
         self.decoder = RandomResizedCropRGBImageDecoder((res, res))
-        image_pipeline: List[Operation] = [
-            self.decoder,
-            RandomHorizontalFlip(),
-            ToTensor(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-            ToTorchImage(),
-            NormalizeImage(IMAGENET_MEAN, IMAGENET_STD, np.float16),
-        ]
+        if auto_augment:
+            image_pipeline: List[Operation] = [
+                self.decoder,
+                RandomHorizontalFlip(),
+                ToTensor(),
+                ToDevice(ch.device(this_device), non_blocking=True),
+                ToTorchImage(),
+                # T.TrivialAugmentWide(interpolation=InterpolationMode.BILINEAR),
+                T.RandomErasing(p=random_erase_prob),
+                NormalizeImage(IMAGENET_MEAN, IMAGENET_STD, np.float16),
+            ]
+        else:
+            image_pipeline: List[Operation] = [
+                self.decoder,
+                RandomHorizontalFlip(),
+                ToTensor(),
+                ToDevice(ch.device(this_device), non_blocking=True),
+                ToTorchImage(),
+                NormalizeImage(IMAGENET_MEAN, IMAGENET_STD, np.float16),
+            ]
 
         label_pipeline: List[Operation] = [
             IntDecoder(),
@@ -395,7 +535,7 @@ class ImageNetTrainer:
                     **extra_dict,
                 )
             )
-            
+
         if self.gpu == 0:
             if epoch % every_n_epochs == 0:
                 save_model_checkpoint(
@@ -481,6 +621,9 @@ class ImageNetTrainer:
                 iterator.set_description(msg)
             ### Logging end
 
+            # if ix == 5:
+            #     break
+
         if log_level > 0:
             loss = ch.stack(losses).mean().cpu()
             assert not ch.isnan(loss), "Loss is NaN!"
@@ -518,9 +661,7 @@ class ImageNetTrainer:
         }
 
         if self.gpu == 0:
-            self.model_ckpt_path = create_version_dir(
-                model_ckpt_path, str(self.uid)
-            )
+            self.model_ckpt_path = create_version_dir(model_ckpt_path, str(self.uid))
             folder = (Path(folder) / str(self.uid)).absolute()
             folder.mkdir(parents=True)
 
@@ -606,7 +747,8 @@ def make_config(quiet=False):
     config.validate(mode="stderr")
     if not quiet:
         config.summary()
-        
+
+
 def save_model_checkpoint(model, optimizer, epoch, version_dir, metric_value):
     """
     Save the model checkpoint with an incremented version number.
@@ -632,7 +774,7 @@ def save_model_checkpoint(model, optimizer, epoch, version_dir, metric_value):
     )
 
     print(f"Model checkpoint saved to: {checkpoint_path}")
-    
+
 
 def create_version_dir(base_dir, uuid):
     """

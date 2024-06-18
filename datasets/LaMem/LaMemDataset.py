@@ -10,7 +10,7 @@ import numpy as np
 
 class LaMem(Dataset):
 
-    def __init__(self, root: str, splits: List[str], transforms=None):
+    def __init__(self, root: str, splits: List[str], transforms=None, change_labels: bool = False):
 
         self.mem_frame = pd.concat(
             [
@@ -21,7 +21,18 @@ class LaMem(Dataset):
                 for split in splits
             ],
             axis=0,
-        )
+        ).reset_index(drop=True)
+        
+        if change_labels:
+            print("*" * 100)
+            print(f"Changing labels")
+            print(f"Before:\n{self.mem_frame.head()}")
+            self.mem_frame["memo_score"] = (
+                self.mem_frame["memo_score"].sample(frac=1).reset_index(drop=True)
+            )
+            print(f"After:\n{self.mem_frame.head()}")
+            print("*" * 100)
+
         self.transforms = transforms
         self.images_path = os.path.join(root, "images")
 

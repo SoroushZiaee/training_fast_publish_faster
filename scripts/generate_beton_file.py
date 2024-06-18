@@ -69,7 +69,7 @@ class LaMem(Dataset):
             ".jpg", ".npy", regex=False
         )
         self.transforms = transforms
-        self.images_path = os.path.join(root, "tranformed_images")
+        self.images_path = os.path.join(root, "images")
 
     def __len__(self):
         return len(self.mem_frame)
@@ -79,10 +79,11 @@ class LaMem(Dataset):
             idx = idx.tolist()
 
         img_name = os.path.join(
-            self.images_path, self.mem_frame["transormed_name"][idx]
+            self.images_path, self.mem_frame["image_name"][idx]
         )
         # image = torch.load(img_name)
-        image = np.load(img_name, allow_pickle=True)
+        # image = np.load(img_name, allow_pickle=True)
+        image = PIL.Image.open(img_name).convert("RGB")
         mem_score = self.mem_frame["memo_score"][idx]
         target = float(mem_score)
         target = torch.tensor(target)
@@ -126,23 +127,6 @@ def get_dataset(dataset: str, split: str):
             splits = val_splits
         else:
             splits = test_splits
-
-        mean = np.load(
-            "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/datasets/LaMem/support_files/image_mean.npy"
-        )
-
-        # transforms_list = transforms.Compose(
-        #     [
-        #         transforms.Resize((256, 256), PIL.Image.BILINEAR),
-        #         lambda x: np.array(x),
-        #         lambda x: np.subtract(
-        #             x[:, :, [2, 1, 0]], mean
-        #         ),  # Subtract average mean from image (opposite order channels)
-        #         # transforms.ToTensor(),
-        #         # transforms.CenterCrop(desired_image_size),  # Center crop to 224x224
-        #         lambda x: x.astype(np.uint8),
-        #     ]
-        # )
 
         label_decoder = FloatField()
 
@@ -193,41 +177,22 @@ def main(
         print(f"{len(my_dataset) =}")
     print("here")
     
-    # for i in tqdm(range(0,len(my_dataset))):
-    #     try:
-    #         img, lbl = my_dataset[i]
-        
-    #     except Exception as e:
-    #         print(f"{e}")
-    #         print(f"{i}: {img.shape}")
     
     # Pass a type for each data field
-    # writer = DatasetWriter(
-    #     write_path,
-    #     {
-    #         "image": RGBImageField(
-    #             write_mode=write_mode,
-    #             max_resolution=max_resolution,
-    #             compress_probability=compress_probability,
-    #             jpeg_quality=jpeg_quality,
-    #         ),
-    #         "label": label_decoder,
-    #     },
-    #     num_workers=num_workers,
-    # )
-    
     writer = DatasetWriter(
         write_path,
         {
-            "covariate": NDArrayField(
-                dtype=img.dtype,
-                shape=img.shape
+            "image": RGBImageField(
+                write_mode=write_mode,
+                max_resolution=max_resolution,
+                compress_probability=compress_probability,
+                jpeg_quality=jpeg_quality,
             ),
             "label": label_decoder,
         },
         num_workers=num_workers,
     )
-
+    
     # Write dataset
     writer.from_indexed_dataset(my_dataset, chunksize=chunk_size)
 

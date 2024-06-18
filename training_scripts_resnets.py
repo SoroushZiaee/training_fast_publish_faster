@@ -571,7 +571,7 @@ def main():
         "start_ramp": 65,
         "train_dataset": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_train_256.ffcv",
         "val_dataset": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_validation_256.ffcv",
-        "num_workers": 5,
+        "num_workers": 10,
         "in_memory": 1,
         "step_ratio": 0.1,
         "step_length": 30,

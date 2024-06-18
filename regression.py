@@ -373,12 +373,12 @@ class ImageNetTrainer:
 
             elif task == "reg":
                 return [
-                    NDArrayDecoder(),
+                    self.decoder,
                     RandomHorizontalFlip(),
                     ToTensor(),
-                    ToTorchImage(channels_last=False),
-                    Convert(ch.float16),
                     ToDevice(ch.device(this_device), non_blocking=True),
+                    ToTorchImage(),
+                    NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
                 ]
 
         elif stage == "val":
@@ -395,12 +395,11 @@ class ImageNetTrainer:
 
             elif task == "reg":
                 return [
-                    NDArrayDecoder(),
-                    RandomHorizontalFlip(),
+                    cropper,
                     ToTensor(),
-                    ToTorchImage(channels_last=False),
-                    Convert(ch.float16),
                     ToDevice(ch.device(this_device), non_blocking=True),
+                    ToTorchImage(),
+                    NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
                 ]
 
     @param("training.task")

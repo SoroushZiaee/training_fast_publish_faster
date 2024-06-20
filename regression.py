@@ -11,6 +11,7 @@ ch.autograd.profiler.profile(False)
 ch.autograd.set_detect_anomaly(True)
 
 from torchvision import models
+from torchvision import transforms
 import torchmetrics
 import numpy as np
 from tqdm import tqdm
@@ -76,12 +77,16 @@ Section("lr", "lr scheduling").params(
     lr_warmup_method=Param(OneOf(["linear"]), default="linear"),
     lr_warmup_decay=Param(float, "learning rate", default=0.01),
     lr=Param(float, "learning rate", default=0.5),
+    lr_min=Param(float, "learning rate", default=0.0),
     lr_peak_epoch=Param(int, "Epoch at which LR peaks", default=2),
 )
 
 Section("logging", "how to log stuff").params(
     folder=Param(str, "log location", required=True),
     log_level=Param(int, "0 if only at end 1 otherwise", default=1),
+    every_n_epochs=Param(int, "0 if only at end 1 otherwise", default=5),
+    model_ckpt_path=Param(str, "model checkpoint path", required=True),
+    
 )
 
 Section("validation", "Validation parameters stuff").params(
@@ -112,6 +117,11 @@ Section("dist", "distributed training options").params(
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406]) * 255
 IMAGENET_STD = np.array([0.229, 0.224, 0.225]) * 255
 DEFAULT_CROP_RATIO = 224 / 256
+
+stats_tensor = ch.load(
+    "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/datasets/LaMem/support_files/lamem_mean_std_tensor.pt"
+).numpy()
+LAMEM_MEAN, LAMEM_STD = stats_tensor[:3] * 255, stats_tensor[3:] * 255
 
 
 @param("lr.lr")
@@ -372,11 +382,15 @@ class ImageNetTrainer:
                 ]
 
             elif task == "reg":
+                res = self.get_resolution(epoch=0)
+                self.decoder = RandomResizedCropRGBImageDecoder((res, res))
                 return [
                     self.decoder,
                     RandomHorizontalFlip(),
                     ToTensor(),
                     ToDevice(ch.device(this_device), non_blocking=True),
+                    transforms.RandomVerticalFlip(),
+                    transforms.RandomRotation(degrees=13),
                     ToTorchImage(),
                     NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
                 ]
@@ -394,6 +408,8 @@ class ImageNetTrainer:
                 ]
 
             elif task == "reg":
+                res_tuple = (resolution, resolution)
+                cropper = CenterCropRGBImageDecoder(res_tuple, ratio=DEFAULT_CROP_RATIO)
                 return [
                     cropper,
                     ToTensor(),
@@ -415,6 +431,7 @@ class ImageNetTrainer:
                 ]
 
             elif task == "reg":
+                print("here")
                 return [
                     FloatDecoder(),
                     ToTensor(),
@@ -433,6 +450,7 @@ class ImageNetTrainer:
                 ]
 
             elif task == "reg":
+                print("here")
                 return [
                     FloatDecoder(),
                     ToTensor(),
@@ -443,15 +461,16 @@ class ImageNetTrainer:
 
     @param("training.task")
     def get_pipeline(self, task, stage: str = "train"):
+        print(f"{task = }")
         if task == "clf":
             image_pipeline: List[Operation] = self.get_image_pipeline(stage=stage)
             label_pipeline: List[Operation] = self.get_label_pipeline(stage=stage)
             return {"image": image_pipeline, "label": label_pipeline}
-
+        
         elif task == "reg":
             image_pipeline: List[Operation] = self.get_image_pipeline(stage=stage)
             label_pipeline: List[Operation] = self.get_label_pipeline(stage=stage)
-            return {"covariate": image_pipeline, "label": label_pipeline}
+            return {"image": image_pipeline, "label": label_pipeline}
 
     @param("data.train_dataset")
     @param("data.num_workers")
@@ -527,11 +546,11 @@ class ImageNetTrainer:
             if log_level > 0:
                 extra_dict = {"train_loss": train_loss, "epoch": epoch}
 
-                self.eval_and_log(extra_dict)
+                self.eval_and_log(epoch=epoch, extra_dict=extra_dict)
 
             self.scheduler.step()
 
-        self.eval_and_log({"epoch": epoch})
+        self.eval_and_log(extra_dict={"epoch": epoch})
         if self.gpu == 0:
             ch.save(self.model.state_dict(), self.log_folder / "final_weights.pt")
 
@@ -552,7 +571,7 @@ class ImageNetTrainer:
                 "val_time": val_time,
             }
 
-    def eval_and_log(self, extra_dict={}):
+    def eval_and_log(self, epoch: int = 0, every_n_epochs: int = 5, extra_dict={}):
         start_val = time.time()
         stats = self.val_loop()
         val_time = time.time() - start_val
@@ -563,6 +582,16 @@ class ImageNetTrainer:
                     **extra_dict,
                 )
             )
+        
+        if self.gpu == 0:
+            if epoch % every_n_epochs == 0:
+                save_model_checkpoint(
+                    self.model,
+                    self.optimizer,
+                    epoch,
+                    self.model_ckpt_path,
+                    metric_value=stats["loss"],
+                )
 
         return stats
 
@@ -670,6 +699,9 @@ class ImageNetTrainer:
 
                 msg = ", ".join(f"{n}={v}" for n, v in zip(names, values))
                 iterator.set_description(msg)
+            
+            # if ix == 4:
+            #     break
             ### Logging end
 
         if log_level > 0:
@@ -719,12 +751,14 @@ class ImageNetTrainer:
             }
 
     @param("logging.folder")
-    def initialize_logger(self, folder):
+    @param("logging.model_ckpt_path")
+    def initialize_logger(self, folder, model_ckpt_path):
         self.val_meters = self.get_val_meters()
 
         self.custom_print("metric", self.val_meters)
 
         if self.gpu == 0:
+            self.model_ckpt_path = create_version_dir(model_ckpt_path, str(self.uid))
             folder = (Path(folder) / str(self.uid)).absolute()
             folder.mkdir(parents=True)
 
@@ -808,6 +842,49 @@ class MeanScalarMetric(torchmetrics.Metric):
     def compute(self):
         return self.sum.float() / self.count
 
+def save_model_checkpoint(model, optimizer, epoch, version_dir, metric_value):
+    """
+    Save the model checkpoint with an incremented version number.
+
+    Parameters:
+    model (nn.Module): The model to save.
+    optimizer (optim.Optimizer): The optimizer state to save.
+    epoch (int): The current epoch number.
+    version_dir (str): The version directory where checkpoints will be saved.
+    """
+    checkpoint_path = os.path.join(
+        version_dir, f"checkpoint_epoch_{epoch}_{metric_value:.2f}.pth"
+    )
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+
+    ch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        },
+        checkpoint_path,
+    )
+
+    print(f"Model checkpoint saved to: {checkpoint_path}")
+
+
+def create_version_dir(base_dir, uuid):
+    """
+    Create a new version directory.
+
+    Parameters:
+    base_dir (str): The base directory where versions are stored.
+
+    Returns:
+    str: The path to the new version directory.
+    """
+    # next_version = get_next_version(base_dir)
+    version_dir = os.path.join(base_dir, uuid)
+    os.makedirs(version_dir, exist_ok=True)
+
+    print(f"Created version directory: {version_dir}")
+    return version_dir
 
 # Running
 def make_config(quiet=False):

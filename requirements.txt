@@ -8,3 +8,6 @@ terminaltables==3.1.10+computecanada
 ffcv==0.0.3+computecanada
 cupy==12.2.0+computecanada
 networkx==3.2.1+computecanada
+memory-profiler==0.61.0
+jupyterlab
+black

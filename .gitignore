@@ -169,3 +169,4 @@ log
 *.pt
 *.png
 *.yaml
+*.pkl

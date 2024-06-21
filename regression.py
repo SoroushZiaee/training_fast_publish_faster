@@ -86,7 +86,6 @@ Section("logging", "how to log stuff").params(
     log_level=Param(int, "0 if only at end 1 otherwise", default=1),
     every_n_epochs=Param(int, "0 if only at end 1 otherwise", default=5),
     model_ckpt_path=Param(str, "model checkpoint path", required=True),
-    
 )
 
 Section("validation", "Validation parameters stuff").params(
@@ -99,7 +98,9 @@ Section("training", "training hyper param stuff").params(
     task=Param(And(str, OneOf(["clf", "reg", "both"])), "training task", default="clf"),
     eval_only=Param(int, "eval only?", default=0),
     batch_size=Param(int, "The batch size", default=512),
-    optimizer=Param(And(str, OneOf(["sgd"])), "The optimizer", default="sgd"),
+    optimizer=Param(
+        And(str, OneOf(["sgd", "adam", "adamw"])), "The optimizer", default="sgd"
+    ),
     momentum=Param(float, "SGD momentum", default=0.9),
     weight_decay=Param(float, "weight decay", default=4e-5),
     epochs=Param(int, "number of epochs", default=30),
@@ -304,7 +305,6 @@ class ImageNetTrainer:
     def create_optimizer(
         self, lr, momentum, optimizer, weight_decay, label_smoothing, task
     ):
-        assert optimizer == "sgd"
 
         self.custom_print("lr", lr)
         self.custom_print("weight decay", weight_decay)
@@ -318,7 +318,16 @@ class ImageNetTrainer:
             {"params": other_params, "weight_decay": weight_decay},
         ]
 
-        self.optimizer = ch.optim.SGD(param_groups, lr=lr, momentum=momentum)
+        if optimizer == "sgd":
+            self.optimizer = ch.optim.SGD(param_groups, lr=lr, momentum=momentum)
+
+        elif optimizer == "adam":
+            self.optimizer = ch.optim.Adam(param_groups, lr=lr)
+
+        elif optimizer == "adamw":
+            self.optimizer = ch.optim.AdamW(param_groups, lr=lr)
+
+        self.custom_print("optimizer", self.optimizer)
 
         self.loss = self.get_loss()
         self.custom_print("Loss", type(self.loss))
@@ -466,7 +475,7 @@ class ImageNetTrainer:
             image_pipeline: List[Operation] = self.get_image_pipeline(stage=stage)
             label_pipeline: List[Operation] = self.get_label_pipeline(stage=stage)
             return {"image": image_pipeline, "label": label_pipeline}
-        
+
         elif task == "reg":
             image_pipeline: List[Operation] = self.get_image_pipeline(stage=stage)
             label_pipeline: List[Operation] = self.get_label_pipeline(stage=stage)
@@ -582,7 +591,7 @@ class ImageNetTrainer:
                     **extra_dict,
                 )
             )
-        
+
         if self.gpu == 0:
             if epoch % every_n_epochs == 0:
                 save_model_checkpoint(
@@ -699,7 +708,7 @@ class ImageNetTrainer:
 
                 msg = ", ".join(f"{n}={v}" for n, v in zip(names, values))
                 iterator.set_description(msg)
-            
+
             # if ix == 4:
             #     break
             ### Logging end
@@ -842,6 +851,7 @@ class MeanScalarMetric(torchmetrics.Metric):
     def compute(self):
         return self.sum.float() / self.count
 
+
 def save_model_checkpoint(model, optimizer, epoch, version_dir, metric_value):
     """
     Save the model checkpoint with an incremented version number.
@@ -885,6 +895,7 @@ def create_version_dir(base_dir, uuid):
 
     print(f"Created version directory: {version_dir}")
     return version_dir
+
 
 # Running
 def make_config(quiet=False):

@@ -170,3 +170,4 @@ log
 *.png
 *.yaml
 *.pkl
+*.h5

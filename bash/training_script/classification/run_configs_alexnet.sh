@@ -4,7 +4,7 @@
 #SBATCH --error=training_alexnet.err
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=10
-#SBATCH --time=12:00:00
+#SBATCH --time=00:30:00
 #SBATCH --gres=gpu:a100:4
 #SBATCH --mem=50G
 #SBATCH --mail-type=BEGIN,END,FAIL # Send email on job BEGIN, END and FAIL

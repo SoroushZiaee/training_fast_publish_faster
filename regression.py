@@ -20,7 +20,7 @@ import os
 import time
 import json
 from uuid import uuid4
-from typing import List
+from typing import List, Optional, Tuple
 from pathlib import Path
 from argparse import ArgumentParser
 
@@ -103,10 +103,15 @@ Section("training", "training hyper param stuff").params(
     ),
     momentum=Param(float, "SGD momentum", default=0.9),
     weight_decay=Param(float, "weight decay", default=4e-5),
+    norm_weight_decay=Param(float, "norm_weight_decay", default=0.0),
+    bias_weight_decay=Param(float, "weight decay", default=None),
+    transformer_embedding_decay=Param(float, "weight decay", default=None),
     epochs=Param(int, "number of epochs", default=30),
     label_smoothing=Param(float, "label smoothing parameter", default=0.1),
     distributed=Param(int, "is distributed?", default=0),
     use_blurpool=Param(int, "use blurpool?", default=0),
+    auto_augment=Param(int, "use auto_augment?", default=0),
+    random_erase_prob=Param(float, "random erase prob", default=0.5),
 )
 
 Section("dist", "distributed training options").params(
@@ -144,6 +149,72 @@ def get_cyclic_lr(epoch, lr, epochs, lr_peak_epoch):
     xs = [0, lr_peak_epoch, epochs]
     ys = [1e-4 * lr, lr, 0]
     return np.interp([epoch], xs, ys)[0]
+
+
+def set_weight_decay(
+    model: ch.nn.Module,
+    weight_decay: float,
+    norm_weight_decay: Optional[float] = None,
+    norm_classes: Optional[List[type]] = None,
+    custom_keys_weight_decay: Optional[List[Tuple[str, float]]] = None,
+):
+    if not norm_classes:
+        norm_classes = [
+            ch.nn.modules.batchnorm._BatchNorm,
+            ch.nn.LayerNorm,
+            ch.nn.GroupNorm,
+            ch.nn.modules.instancenorm._InstanceNorm,
+            ch.nn.LocalResponseNorm,
+        ]
+    norm_classes = tuple(norm_classes)
+
+    params = {
+        "other": [],
+        "norm": [],
+    }
+    params_weight_decay = {
+        "other": weight_decay,
+        "norm": norm_weight_decay,
+    }
+    custom_keys = []
+    if custom_keys_weight_decay is not None:
+        for key, weight_decay in custom_keys_weight_decay:
+            params[key] = []
+            params_weight_decay[key] = weight_decay
+            custom_keys.append(key)
+
+    def _add_params(module, prefix=""):
+        for name, p in module.named_parameters(recurse=False):
+            if not p.requires_grad:
+                continue
+            is_custom_key = False
+            for key in custom_keys:
+                target_name = (
+                    f"{prefix}.{name}" if prefix != "" and "." in key else name
+                )
+                if key == target_name:
+                    params[key].append(p)
+                    is_custom_key = True
+                    break
+            if not is_custom_key:
+                if norm_weight_decay is not None and isinstance(module, norm_classes):
+                    params["norm"].append(p)
+                else:
+                    params["other"].append(p)
+
+        for child_name, child_module in module.named_children():
+            child_prefix = f"{prefix}.{child_name}" if prefix != "" else child_name
+            _add_params(child_module, prefix=child_prefix)
+
+    _add_params(model)
+
+    param_groups = []
+    for key in params:
+        if len(params[key]) > 0:
+            param_groups.append(
+                {"params": params[key], "weight_decay": params_weight_decay[key]}
+            )
+    return param_groups
 
 
 class BlurPoolConv2d(ch.nn.Module):
@@ -301,22 +372,53 @@ class ImageNetTrainer:
     @param("training.optimizer")
     @param("training.weight_decay")
     @param("training.label_smoothing")
-    @param("training.task")
+    @param("training.norm_weight_decay")
+    @param("training.bias_weight_decay")
+    @param("training.transformer_embedding_decay")
     def create_optimizer(
-        self, lr, momentum, optimizer, weight_decay, label_smoothing, task
+        self,
+        lr,
+        momentum,
+        optimizer,
+        weight_decay,
+        label_smoothing,
+        task,
+        norm_weight_decay,
+        bias_weight_decay: float = None,
+        transformer_embedding_decay: float = None,
     ):
 
         self.custom_print("lr", lr)
         self.custom_print("weight decay", weight_decay)
 
-        # Only do weight decay on non-batchnorm parameters
-        all_params = list(self.model.named_parameters())
-        bn_params = [v for k, v in all_params if ("bn" in k)]
-        other_params = [v for k, v in all_params if not ("bn" in k)]
-        param_groups = [
-            {"params": bn_params, "weight_decay": 0.0},
-            {"params": other_params, "weight_decay": weight_decay},
-        ]
+        custom_keys_weight_decay = []
+        if bias_weight_decay is not None:
+            custom_keys_weight_decay.append(("bias", bias_weight_decay))
+        if transformer_embedding_decay is not None:
+            for key in [
+                "class_token",
+                "position_embedding",
+                "relative_position_bias_table",
+            ]:
+                custom_keys_weight_decay.append((key, transformer_embedding_decay))
+
+        param_groups = set_weight_decay(
+            self.model,
+            weight_decay,
+            norm_weight_decay=norm_weight_decay,
+            custom_keys_weight_decay=(
+                custom_keys_weight_decay if len(custom_keys_weight_decay) > 0 else None
+            ),
+        )
+
+        # # Only do weight decay on non-batchnorm parameters
+        # all_params = list(self.model.named_parameters())
+        # bn_params = [v for k, v in all_params if ("bn" in k)]
+        # other_params = [v for k, v in all_params if not ("bn" in k)]
+        # param_groups = [
+        #     {"params": bn_params, "weight_decay": 0.0},
+        #     {"params": other_params, "weight_decay": weight_decay},
+        # ]
 
         if optimizer == "sgd":
             self.optimizer = ch.optim.SGD(param_groups, lr=lr, momentum=momentum)
@@ -338,6 +440,8 @@ class ImageNetTrainer:
     @param("lr.lr_warmup_epochs")
     @param("lr.lr_warmup_method")
     @param("lr.lr_warmup_decay")
+    @param("lr.lr_min")
+    @param("training.epochs")
     def create_scheduler(
         self,
         optimizer,
@@ -347,10 +451,22 @@ class ImageNetTrainer:
         lr_warmup_epochs,
         lr_warmup_method,
         lr_warmup_decay,
+        lr_min,
+        epochs,
     ):
         if lr_schedule_type == "steplr":
             main_lr_scheduler = ch.optim.lr_scheduler.StepLR(
                 optimizer, step_size=lr_step_size, gamma=lr_gamma
+            )
+
+        elif lr_schedule_type == "cosineannealinglr":
+            main_lr_scheduler = ch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=epochs - lr_warmup_epochs, eta_min=lr_min
+            )
+
+        elif lr_schedule_type == "exponentiallr":
+            main_lr_scheduler = ch.optim.lr_scheduler.ExponentialLR(
+                optimizer, gamma=lr_gamma
             )
 
         if lr_warmup_epochs > 0:

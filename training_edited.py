@@ -858,8 +858,8 @@ class ImageNetTrainer:
                 iterator.set_description(msg)
             ### Logging end
 
-            # if ix == 2:
-            #     break
+            if ix == 2:
+                break
 
         if log_level > 0:
             loss = ch.stack(losses).mean().cpu()
@@ -886,8 +886,8 @@ class ImageNetTrainer:
                     loss_val = self.loss(output, target)
                     self.val_meters["loss"](loss_val)
 
-                    # if ix == 2:
-                    #     break
+                    if ix == 2:
+                        break
 
         stats = {k: m.compute().item() for k, m in self.val_meters.items()}
         [meter.reset() for meter in self.val_meters.values()]

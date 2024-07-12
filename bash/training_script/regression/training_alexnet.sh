@@ -11,13 +11,13 @@ for batch_size in "${batch_sizes[@]}"; do
     for weight_decay in "${weight_decays[@]}"; do
       echo "Running with batch_size=${batch_size}, learning_rate=${learning_rate}, weight_decay=${weight_decay}"
       python training.py \
-        --data.train_dataset=/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/lamem_train_299.ffcv \
-        --data.val_dataset=/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/lamem_validation_299.ffcv \
+        --data.train_dataset=/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_train_256.ffcv \
+        --data.val_dataset=/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_validation_256.ffcv \
         --data.in_memory=1 \
         --data.num_workers=5 \
-        --dist.world_size=1 \
-        --logging.folder=./runs/alexnet_logs_reg \
-        --logging.model_ckpt_path=./weights/alexnet_weights_reg \
+        --dist.world_size=4 \
+        --logging.folder=./runs/alexnet_logs_clf \
+        --logging.model_ckpt_path=./weights/alexnet_weights_clf \
         --logging.log_level=1 \
         --lr.lr_schedule_type=steplr \
         --lr.lr_step_size=30 \
@@ -33,7 +33,7 @@ for batch_size in "${batch_sizes[@]}"; do
         --resolution.end_ramp=13 \
         --resolution.start_ramp=11 \
         --resolution.fix_res=0 \
-        --training.task=reg \
+        --training.task=clf \
         --training.eval_only=0 \
         --training.batch_size=${batch_size} \
         --training.optimizer=sgd \

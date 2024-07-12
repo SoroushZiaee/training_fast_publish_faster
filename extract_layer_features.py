@@ -20,6 +20,9 @@ import numpy as np
 import os
 import PIL.Image
 import argparse
+
+# save the pickle file
+import pickle
 from memory_profiler import profile
 
 
@@ -127,59 +130,87 @@ def apply_regression(model):
     return RegressionModel(model)
 
 
-def get_checkpoint_path(model_name: str, task: str):
+def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
     path_dict = {
         "resnet101": {
             "imagenet": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/clf/resnet101-1/checkpoint_epoch_90_0.78.pth",
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/resnet101/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
-            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/alexnet/epoch=54-val_loss=0.02-training_loss=0.02.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/resnet101/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/resnet101/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/resnet101/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/resnet101/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
         "resnet50": {
-            "imagenet": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/clf/resnet50_weights/resnet50-1/checkpoint_epoch_90_0.77.pth",
+            "imagenet": f"/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/clf/resnet50_weights/resnet50-{model_id}/checkpoint_epoch_90_0.77.pth",
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/resnet50/epoch=74-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/resnet50/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/resnet50/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/resnet50/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/resnet50/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
         "resnet18": {
             "imagenet": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/clf/resnet18_weights/resnet18-0/checkpoint_epoch_90_0.70.pth",
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/resnet18/epoch=69-val_loss=0.01-training_loss=0.00.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/resnet18/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/resnet18/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/resnet18/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/resnet18/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
         "vgg16": {
             "imagenet": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/clf/vgg16_weights/vgg16-0/checkpoint_epoch_90_0.63.pth",
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/vgg16/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/vgg16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/vgg16/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/vgg16/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/vgg16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
         "vgg19": {
             "imagenet": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/clf/vgg19_weights/vgg19-0/checkpoint_epoch_90_0.63.pth",
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/vgg19/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/vgg19/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/vgg19/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/vgg19/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/vgg19/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
         "inception_v3": {
             "imagenet": None,  # fix this
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/inception/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/inception/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/inception/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/inception/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/inception/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
         "alexnet": {
             "imagenet": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/weights/clf/alexnet_weights/alexnet-1/checkpoint_epoch_90_0.52.pth",
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/alexnet/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",  # fix this
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/alexnet/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/alexnet/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/alexnet/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/alexnet/epoch=89-val_loss=0.01-training_loss=0.02.ckpt",
         },
         "vit_b_16": {
             "imagenet": None,  # fix this
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/vit_b_16/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/vit_b_16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/vit_b_16/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/vit_b_16/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/vit_b_16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
         "vit_b_32": {
             "imagenet": None,  # fix this
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/vit_b_32/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/vit_b_32/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/vit_b_32/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/vit_b_32/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/vit_b_32/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
         "efficientnet_v2_s": {
             "imagenet": None,  # fix this
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/efficient_v2/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
-            "combine": "alexnet_combine.pth",
+            "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/efficient_v2/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
+            "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/efficient_v2/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/efficient_v2/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/efficient_v2/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
     }
 
@@ -253,30 +284,28 @@ def get_layer_name(model_name: str) -> List[str]:
             "classifier.6",
         ],
         "vit_b_16": [
-            "x",
-            "cat",
-            "encoder.layers.encoder_layer_1.dim",
-            "encoder.layers.encoder_layer_2.dropout",
-            "encoder.layers.encoder_layer_4.getattr",
-            "encoder.layers.encoder_layer_5.ln_1",
-            "encoder.layers.encoder_layer_7.self_attention",
-            "encoder.layers.encoder_layer_8.add_1",
-            "encoder.layers.encoder_layer_10.getitem_1",
-            "heads.head",
+            "encoder.layers.encoder_layer_0.mlp",
+            "encoder.layers.encoder_layer_1.mlp",
+            "encoder.layers.encoder_layer_2.mlp",
             "encoder.layers.encoder_layer_3.mlp",
+            "encoder.layers.encoder_layer_4.mlp",
+            "encoder.layers.encoder_layer_6.mlp",
+            "encoder.layers.encoder_layer_7.mlp",
+            "encoder.layers.encoder_layer_8.mlp",
+            "encoder.layers.encoder_layer_9.mlp",
+            "encoder.layers.encoder_layer_11.mlp",
         ],
         "vit_b_32": [
-            "x",
-            "cat",
-            "encoder.layers.encoder_layer_1.dim",
-            "encoder.layers.encoder_layer_2.dropout",
-            "encoder.layers.encoder_layer_4.getattr",
-            "encoder.layers.encoder_layer_5.ln_1",
-            "encoder.layers.encoder_layer_7.self_attention",
-            "encoder.layers.encoder_layer_8.add_1",
-            "encoder.layers.encoder_layer_10.getitem_1",
-            "heads.head",
+            "encoder.layers.encoder_layer_0.mlp",
+            "encoder.layers.encoder_layer_1.mlp",
+            "encoder.layers.encoder_layer_2.mlp",
+            "encoder.layers.encoder_layer_3.mlp",
+            "encoder.layers.encoder_layer_4.mlp",
             "encoder.layers.encoder_layer_6.mlp",
+            "encoder.layers.encoder_layer_7.mlp",
+            "encoder.layers.encoder_layer_8.mlp",
+            "encoder.layers.encoder_layer_9.mlp",
+            "encoder.layers.encoder_layer_11.mlp",
         ],
         "resnet50": [
             "x",
@@ -324,7 +353,8 @@ def get_prefix(task: str = "imagenet", model_name: str = "alexnet"):
     if task == "imagenet":
         return "module."
 
-    elif task == "lamem":
+    # elif task == "lamem" or task == "lamem_shuffle":
+    elif "lamem" in task:
         return "model.model."
 
     else:
@@ -431,6 +461,7 @@ def get_model(
         layer_name = [layer_name]
 
     model = getattr(models, model_name)(weights=None)
+
     print(f"{model = }")
 
     if use_blurpool:
@@ -491,7 +522,7 @@ def get_inference(model, dataset, device):
         x = dataset[i]
         x = x.unsqueeze_(0)
         x = x.to(device)
-        output = model(x)
+        output = model(x)  # {"layer_name": feature, "layer_name":}
         # print(f"{output = }")
         # print(f"{output.keys() = }")
         # for key, value in output.items():
@@ -500,9 +531,11 @@ def get_inference(model, dataset, device):
 
         output = detach_output(output, device)
         outputs.append(output)
-
         # if i == 2:
         #     break
+    del x, model, dataset
+    print("Memory Cleared")
+    clear_memory()
 
     outputs = concantenate_outputs(outputs)
     return outputs
@@ -521,7 +554,8 @@ def clear_memory():
 def main(args):
     print(f"Extracting features from {args.model} for task {args.task}")
 
-    checkpoint_path = get_checkpoint_path(args.model, args.task)
+    resnet_number = args.model_id
+    checkpoint_path = get_checkpoint_path(args.model, args.task, model_id=args.model_id)
     layer_names = get_layer_name(args.model)
 
     print(f"{checkpoint_path = }")
@@ -549,6 +583,7 @@ def main(args):
         device=device,
     )
     model.eval()
+    clear_memory()
 
     print(f"{model = }")
 
@@ -563,11 +598,10 @@ def main(args):
 
     print(f"Saving features to {args.model}_{args.task}")
 
-    # save the pickle file
-    import pickle
-
-    with open(f"{args.model}_{args.task}.pkl", "wb") as f:
+    with open(f"{args.model}_{args.task}_{resnet_number}.pkl", "wb") as f:
         pickle.dump(layer_features, f)
+
+    print(f"Features saved to {args.model}_{args.task}.pkl")
 
     # print(f"{type(layer_features) = }")
     # print(f"{layer_features.keys() = }")
@@ -579,11 +613,11 @@ def main(args):
     print("Memory Cleared")
 
     # load the pickle file
-    with open(f"{args.model}_{args.task}.pkl", "rb") as f:
+    with open(f"{args.model}_{args.task}_{resnet_number}.pkl", "rb") as f:
         layer_features = pickle.load(f)
 
     print(f"{layer_features.keys() = }")
-    print(f"{layer_features['x'].shape = }")
+    # print(f"{layer_features['x'].shape = }")
     # print(f"{layer_features['layer3.14.relu_2'].shape = }")
 
 
@@ -593,6 +627,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--model", type=str, help="Path to the pre-trained model")
     parser.add_argument("--task", type=str, help="Task to perform")
+    parser.add_argument("--model_id", type=int, help="Task to perform", default=1)
 
     args = parser.parse_args()
     main(args)

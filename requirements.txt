@@ -1,6 +1,6 @@
 torch==1.12.0+computecanada
 torchvision==0.13.0+computecanada
-torchmetrics==0.7.3
+torchmetrics==0.8.0+computecanada
 numba==0.58.0+computecanada
 tqdm==4.66.4+computecanada
 fastargs==1.2.0+computecanada
@@ -8,6 +8,6 @@ terminaltables==3.1.10+computecanada
 ffcv==0.0.3+computecanada
 cupy==12.2.0+computecanada
 networkx==3.2.1+computecanada
-memory-profiler==0.61.0
+memory-profiler==0.52.0+computecanada
 jupyterlab
 black

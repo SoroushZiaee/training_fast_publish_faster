@@ -1,22 +1,18 @@
 #!/bin/bash
-#SBATCH --job-name=Imagenet_resnet18
-#SBATCH --output=Imagenet_resnet18.out
-#SBATCH --error=Imagenet_resnet18.err
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=10
-#SBATCH --time=12:00:00
-#SBATCH --gres=gpu:a100:4
-#SBATCH --mem=50G
+#SBATCH --job-name=cka_all_layers
+#SBATCH --output="cka_all_layers.out"
+#SBATCH --error="cka_all_layers.err"
+#SBATCH --array=1
+#SBATCH --cpus-per-task=5
+#SBATCH --time=00:5:00
+#SBATCH --mem=10G
 #SBATCH --mail-type=BEGIN,END,FAIL # Send email on job BEGIN, END and FAIL
 #SBATCH --mail-user=soroush1@yorku.ca
 
-
 echo "Start Installing and setup env"
 source /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/bash/prepare_env/setup_env_node.sh
-echo "Env has been set up"
 
 module list
-
 pip freeze
 
 virtualenv --no-download $SLURM_TMPDIR/env
@@ -29,7 +25,4 @@ pip install --no-index -r requirements.txt
 
 echo "Env has been set up"
 
-pip freeze
-
-echo "Running ResNet18"
-python /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/training_scripts_resnets.py
+srun /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/cka_all_layers.py

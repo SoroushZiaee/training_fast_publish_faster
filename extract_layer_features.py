@@ -137,6 +137,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/resnet101/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/resnet101/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/resnet101/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/resnet101/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/resnet101/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/resnet101/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -145,6 +146,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/resnet50/epoch=74-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/resnet50/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/resnet50/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/resnet50/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/resnet50/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/resnet50/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -153,6 +155,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/resnet18/epoch=69-val_loss=0.01-training_loss=0.00.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/resnet18/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/resnet18/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/resnet18/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/resnet18/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/resnet18/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -161,6 +164,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/vgg16/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/vgg16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/vgg16/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/vgg16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/vgg16/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/vgg16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -169,6 +173,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/vgg19/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/vgg19/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/vgg19/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/vgg19/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/vgg19/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/vgg19/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -177,6 +182,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/inception/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/inception/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/inception/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/inception/epoch=89-val_loss=0.02-training_loss=0.01.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/inception/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/inception/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -185,6 +191,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/alexnet/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",  # fix this
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/alexnet/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/alexnet/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/alexnet/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/alexnet/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/alexnet/epoch=89-val_loss=0.01-training_loss=0.02.ckpt",
         },
@@ -193,6 +200,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/vit_b_16/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/vit_b_16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/vit_b_16/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/vit_b_16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/vit_b_16/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/vit_b_16/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -201,6 +209,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/vit_b_32/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/vit_b_32/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/vit_b_32/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/vit_b_32/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/vit_b_32/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/vit_b_32/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -209,6 +218,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
             "lamem": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem/efficient_v2/epoch=9-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_shuffle": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random/efficient_v2/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_freeze/efficient_v2/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
+            "lamem_shuffle_pretrain_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_shuffle_pretrain_freeze/efficient_v2/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
             "lamem_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_pretrain_no_freeze/efficient_v2/epoch=89-val_loss=0.01-training_loss=0.01.ckpt",
             "lamem_random_pretrain_no_freeze": "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/weights/LaMem_random_pretrain_no_freeze/efficient_v2/epoch=89-val_loss=0.02-training_loss=0.02.ckpt",
         },
@@ -219,19 +229,7 @@ def get_checkpoint_path(model_name: str, task: str, model_id: int = 1):
 
 def get_layer_name(model_name: str) -> List[str]:
     layer_dict = {
-        "resnet101": [
-            "x",
-            "layer2.0.bn1",
-            "layer2.3.bn3",
-            "layer3.3.bn2",
-            "layer3.7.relu",
-            "layer3.11.conv1",
-            "layer3.14.relu_2",
-            "layer3.18.bn3",
-            "layer3.22.relu_1",
-            "avgpool",
-            "layer3.2.bn1",
-        ],
+        "resnet101": ['maxpool', 'layer1.1.add', 'layer2.0.add', 'layer2.3.add', 'layer3.1.add', 'layer3.4.add', 'layer3.7.add', 'layer3.10.add', 'layer3.13.add', 'layer3.16.add'],
         "vgg16": [
             "x",
             "features.3",
@@ -244,32 +242,10 @@ def get_layer_name(model_name: str) -> List[str]:
             "classifier.1",
             "classifier.5",
         ],
-        "vgg19": [
-            "x",
-            "features.4",
-            "features.9",
-            "features.14",
-            "features.19",
-            "features.24",
-            "features.29",
-            "features.34",
-            "classifier.0",
-            "classifier.5",
-            "features.36",
-        ],
-        "inception_v3": [
-            "x",
-            "Mixed_5b.branch5x5_2.conv",
-            "Mixed_5c.branch_pool.bn",
-            "Mixed_6a.max_pool2d",
-            "Mixed_6c.branch7x7_1.conv",
-            "Mixed_6d.branch7x7_3.conv",
-            "Mixed_6e.branch7x7dbl_1.relu",
-            "Mixed_7a.max_pool2d",
-            "Mixed_7b.branch_pool.conv",
-            "avgpool",
-            "Mixed_7a.branch3x3_1.bn",
-        ],
+        "vgg19":  ['features.4', 'features.9','features.18','features.27','features.36'],
+        
+        "inception_v3": ['maxpool1', 'maxpool2', 'Mixed_5b.avg_pool2d', 'Mixed_5c.avg_pool2d', 'Mixed_5d.avg_pool2d', 'Mixed_6b.avg_pool2d', 'Mixed_6c.avg_pool2d', 'Mixed_6d.avg_pool2d', 'Mixed_6e.avg_pool2d', 'Mixed_7b.avg_pool2d', 'Mixed_7c.avg_pool2d'],
+        
         "alexnet": [
             "x",
             "features.1",
@@ -307,43 +283,10 @@ def get_layer_name(model_name: str) -> List[str]:
             "encoder.layers.encoder_layer_9.mlp",
             "encoder.layers.encoder_layer_11.mlp",
         ],
-        "resnet50": [
-            "x",
-            "layer1.1.relu",
-            "layer2.0.bn1",
-            "layer2.1.relu_2",
-            "layer2.3.add",
-            "layer3.1.conv3",
-            "layer3.3.relu_1",
-            "layer3.5.relu_1",
-            "layer4.1.relu",
-            "fc",
-            "layer3.2.bn1",
-        ],
-        "resnet18": [
-            "x",
-            "layer1.0.relu",
-            "layer1.1.conv2",
-            "layer2.0.bn2",
-            "layer2.1.relu",
-            "layer3.0.conv2",
-            "layer3.1.relu",
-            "layer4.0.relu",
-            "layer4.1.bn1",
-            "fc",
-        ],
-        "efficientnet_v2_s": [
-            "x",
-            "features.3.0.block.1",
-            "features.4.2.block.1",
-            "features.5.0.block.1",
-            "features.5.4.block.3",
-            "features.5.8.block.2",
-            "features.6.3.stochastic_depth",
-            "features.6.7.stochastic_depth",
-            "features.6.11.stochastic_depth",
-            "classifier.1",
-        ],
+        "resnet50": ['maxpool', 'layer1.0.add', 'layer1.2.add', 'layer2.0.add', 'layer2.2.add', 'layer3.0.downsample.0', 'layer3.1.add', 'layer3.3.add', 'layer3.5.add', 'layer4.0.add'], 
+        "resnet18": ['maxpool', 'layer1.0.add', 'layer1.1.add', 'layer2.0.add', 'layer2.1.add', 'layer3.0.add', 'layer3.1.add', 'layer4.0.add', 'layer4.1.add', 'avgpool'],
+        
+        "efficientnet_v2_s": ['features.1.0.add', 'features.2.2.add', 'features.3.2.add', 'features.4.2.add', 'features.4.5.add', 'features.5.3.add', 'features.5.6.add', 'features.6.1.add', 'features.6.4.add', 'features.6.7.add'],
     }
 
     return layer_dict[model_name]
@@ -629,7 +572,7 @@ if __name__ == "__main__":
     parser.add_argument("--task", type=str, help="Task to perform")
     parser.add_argument("--model_id", type=int, help="Task to perform", default=1)
 
-    args = parser.parse_args()
+    args = parser.parse_args() 
     main(args)
 
 

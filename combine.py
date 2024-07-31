@@ -7,9 +7,14 @@ import torch.distributed as dist
 ch.backends.cudnn.benchmark = True
 ch.autograd.profiler.emit_nvtx(False)
 ch.autograd.profiler.profile(False)
+ch.autograd.set_detect_anomaly(True)
 
 from torchvision import models
 from torchvision import transforms
+from torchvision.models.feature_extraction import (
+    create_feature_extractor,
+    get_graph_node_names,
+)
 import torchmetrics
 import numpy as np
 from tqdm import tqdm
@@ -36,14 +41,65 @@ from ffcv.transforms import (
     NormalizeImage,
     RandomHorizontalFlip,
     ToTorchImage,
-    Convert,
+    Convert
 )
 from ffcv.fields.rgb_image import (
     CenterCropRGBImageDecoder,
     RandomResizedCropRGBImageDecoder,
 )
 from ffcv.fields.basics import IntDecoder, FloatDecoder
+from scipy.stats import gmean
 
+class HookExtractor(ch.nn.Module):
+    def __init__(self, model, layer_name):
+        super(HookExtractor, self).__init__()
+        self.model = model
+        self.layer_name = layer_name
+        self.hook = None
+        self.extracted_feature = None
+
+    def hook_fn(self, module, input, output):
+        self.extracted_feature = output
+    
+    def get_layer(self, model, name):
+        components = name.split('.')
+        for component in components:
+            if component.isdigit():
+                model = model[int(component)]
+            else:
+                model = getattr(model, component)
+        return model
+
+    def forward(self, x):
+        target_layer = self.get_layer(self.model, self.layer_name)
+        self.hook = target_layer.register_forward_hook(self.hook_fn)
+        _ = self.model(x)
+        self.hook.remove()
+        return self.extracted_feature
+    
+class CombineModel(ch.nn.Module):
+    def __init__(self, model, layer_name):
+        super(CombineModel, self).__init__()
+        self.model = model
+        self.model = HookExtractor(model, layer_name)
+        
+        self.avgpool = ch.nn.AdaptiveAvgPool2d((1, 1))
+        self.flatten = ch.nn.Flatten()
+        
+        # TODO - Avoid hardcoding the number of classes and input channels
+        self.clf_head = ch.nn.Linear(512, 1000, bias=False)
+        self.reg_head = ch.nn.Sequential(ch.nn.Linear(512, 1, bias=False), ch.nn.Sigmoid())
+        
+    def forward(self, x):
+        x = self.model(x)
+        x = self.avgpool(x)
+        x = self.flatten(x)
+        
+        clf_out = self.clf_head(x)
+        reg_out = self.reg_head(x)
+        
+        return clf_out, reg_out
+        
 
 class BlurPoolConv2d(ch.nn.Module):
 
@@ -101,9 +157,9 @@ class ImageNetTrainer:
         if verbose:
             print("loading dataset...")
         self.train_loader = self.create_train_loader()
-        # self.lamem_train_laoder = self.create_lamem_train_loader()
+        self.lamem_train_loader = self.create_lamem_train_loader()
         self.val_loader = self.create_val_loader()
-        # self.lamem_val_loader = self.create_lamem_val_loader()
+        self.lamem_val_loader = self.create_lamem_val_loader()
 
         if verbose:
             print("loading model and optimizers...")
@@ -120,6 +176,14 @@ class ImageNetTrainer:
         if verbose:
             print("init loggers...")
         self.initialize_logger()
+        
+        print(f"Initiate testing the model...")
+        input_tensor = ch.randn(1, 3, 224, 224)
+        input_tensor = input_tensor.to(self.gpu)
+        clf_output, reg_output = self.model(input_tensor)
+        print(f"{clf_output.size() = }")
+        print(f"{reg_output.size() = }")
+        
 
     def setup_distributed(self):
         os.environ["MASTER_ADDR"] = self.config["address"]
@@ -178,34 +242,35 @@ class ImageNetTrainer:
 
         self.optimizer = ch.optim.SGD(param_groups, lr=1, momentum=momentum)
         self.loss = ch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-
+        self.lamem_loss = ch.nn.MSELoss()
+        
     def create_lamem_train_loader(self):
         train_dataset = self.config["lamem_train_dataset"]
         distributed = self.config["distributed"]
         batch_size = self.config["train_batch_size"]
         num_workers = self.config["num_workers"]
         in_memory = self.config["in_memory"]
-
+        
         this_device = f"cuda:{self.gpu}"
         image_pipeline = [
-            self.decoder,
-            RandomHorizontalFlip(),
-            ToTensor(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-            transforms.RandomVerticalFlip(),
-            transforms.RandomRotation(degrees=13),
-            ToTorchImage(),
-            NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
-        ]
-
+                    self.decoder,
+                    RandomHorizontalFlip(),
+                    ToTensor(),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                    transforms.RandomVerticalFlip(),
+                    transforms.RandomRotation(degrees=13),
+                    ToTorchImage(),
+                    NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
+                ]
+        
         label_pipeline = [
-            FloatDecoder(),
-            ToTensor(),
-            Squeeze(),
-            Convert(ch.float16),
-            ToDevice(ch.device(this_device), non_blocking=True),
-        ]
-
+                    FloatDecoder(),
+                    ToTensor(),
+                    Squeeze(),
+                    Convert(ch.float16),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                ]
+        
         order = OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM
         loader = Loader(
             train_dataset,
@@ -217,9 +282,10 @@ class ImageNetTrainer:
             pipelines={"image": image_pipeline, "label": label_pipeline},
             distributed=distributed,
         )
-
+        
         return loader
-
+        
+        
     def create_train_loader(self):
         train_dataset = self.config["train_dataset"]
         num_workers = self.config["num_workers"]
@@ -262,7 +328,7 @@ class ImageNetTrainer:
         )
 
         return loader
-
+    
     def create_lamem_val_loader(self):
         val_dataset = self.config["lamem_val_dataset"]
         num_workers = self.config["num_workers"]
@@ -276,20 +342,20 @@ class ImageNetTrainer:
         res_tuple = (resolution, resolution)
         cropper = CenterCropRGBImageDecoder(res_tuple, ratio=DEFAULT_CROP_RATIO)
         image_pipeline = [
-            cropper,
-            ToTensor(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-            ToTorchImage(),
-            NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
-        ]
+                    cropper,
+                    ToTensor(),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                    ToTorchImage(),
+                    NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
+                ]
 
         label_pipeline = [
-            FloatDecoder(),
-            ToTensor(),
-            Squeeze(),
-            Convert(ch.float16),
-            ToDevice(ch.device(this_device), non_blocking=True),
-        ]
+                    FloatDecoder(),
+                    ToTensor(),
+                    Squeeze(),
+                    Convert(ch.float16),
+                    ToDevice(ch.device(this_device), non_blocking=True),
+                ]
 
         loader = Loader(
             val_dataset,
@@ -352,6 +418,9 @@ class ImageNetTrainer:
             if log_level > 0:
                 extra_dict = {"train_loss": f"{str(train_loss)}", "epoch": epoch}
                 self.eval_and_log(epoch=epoch, extra_dict=extra_dict)
+            
+            # if epoch == 0:
+            #     break
 
         self.eval_and_log(extra_dict={"epoch": epoch})
         if self.gpu == 0:
@@ -369,6 +438,8 @@ class ImageNetTrainer:
                         "current_lr": self.optimizer.param_groups[0]["lr"],
                         "top_1": stats["top_1"],
                         "top_5": stats["top_5"],
+                        "tr_loss": stats["loss"],
+                        "lamem_loss": stats["lamem_loss"],
                         "val_time": val_time,
                     },
                     **extra_dict,
@@ -392,6 +463,7 @@ class ImageNetTrainer:
         weights = self.config["weights"]
         use_blurpool = self.config["use_blurpool"]
         checkpoint = self.config["checkpoint"]
+        task = "combine"
 
         model = getattr(models, arch)(weights=weights)
 
@@ -403,10 +475,16 @@ class ImageNetTrainer:
                     setattr(mod, name, BlurPoolConv2d(child))
                 else:
                     apply_blurpool(child)
+        
+        def apply_combine(model):
+            return CombineModel(model, "layer4.1.bn2") # resnet 18 - IT layer
 
         if use_blurpool:
             apply_blurpool(model)
-
+        
+        if task == "combine":
+            model = apply_combine(model)
+            
         model = model.to(memory_format=ch.channels_last)
         model = model.to(self.gpu)
 
@@ -419,37 +497,80 @@ class ImageNetTrainer:
         model = self.model
         model.train()
         losses = []
+        lamem_losses = []
+        other_losses = []
 
         lr_start, lr_end = self.get_lr(epoch), self.get_lr(epoch + 1)
-        iters = len(self.train_loader)
+        iters = max(len(self.train_loader), len(self.lamem_train_loader))
         lrs = np.interp(np.arange(iters), [0, iters], [lr_start, lr_end])
 
-        iterator = tqdm(self.train_loader)
-        for ix, (images, target) in enumerate(iterator):
-            if self.config["random_labels"]:
-                # Print first 10 labels before shuffling
-                # print("Original labels (first 10):", target[:10].cpu().numpy())
+        iterator = tqdm(range(iters))
+        train_loader_iter = iter(self.train_loader)
+        lamem_train_loader_iter = iter(self.lamem_train_loader)
 
-                # Shuffle labels
-                target = target[ch.randperm(target.size(0))]
-
-                # Print first 10 labels after shuffling
-                # print("Shuffled labels (first 10):", shuffled_target[:10].cpu().numpy())
-
+        for ix in tqdm(iterator):
             for param_group in self.optimizer.param_groups:
                 param_group["lr"] = lrs[ix]
 
             self.optimizer.zero_grad(set_to_none=True)
-            with autocast():
-                output = self.model(images)
-                loss_train = self.loss(output, target)
 
-            self.scaler.scale(loss_train).backward()
+            # Main task
+            try:
+                images, target = next(train_loader_iter)
+            except StopIteration:
+                train_loader_iter = iter(self.train_loader)
+                images, target = next(train_loader_iter)
+                images = images.to(self.gpu)
+                target = target.to(self.gpu)
+                
+                # Check the device of the tensor
+                # print(f"{images.device = }")
+                # print(f"{target.device = }")
+                
+
+            # LaMem task
+            try:
+                lamem_images, lamem_target = next(lamem_train_loader_iter)
+            except StopIteration:
+                lamem_train_loader_iter = iter(self.lamem_train_loader)
+                lamem_images, lamem_target = next(lamem_train_loader_iter)
+                lamem_images = lamem_images.to(self.gpu)
+                lamem_target = lamem_target.to(self.gpu)
+                # print(f"{lamem_images.device = }")
+                # print(f"{lamem_target.device = }")
+                
+            with ch.autocast(device_type='cuda', dtype=ch.float16):
+                # Main task
+                clf_out, _ = self.model(images)                
+                loss_train = self.loss(clf_out, target)
+
+                # LaMem task
+                _, reg_out = self.model(lamem_images)
+                reg_out = reg_out.squeeze()
+                lamem_loss = self.lamem_loss(reg_out, lamem_target)
+                
+                # print(f"{loss_train = }")
+                # print(f"{lamem_loss = }")
+        
+                # Combine losses
+                total_loss = loss_train + lamem_loss
+                
+                # print(f"{total_loss = }")
+
+            # Scaling and backward pass
+            self.scaler.scale(total_loss).backward()
+
+            # Gradient clipping
+            # self.scaler.unscale_(self.optimizer)
+            # ch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
             if self.config["log_level"] > 0:
-                losses.append(loss_train.detach().cpu())
+                losses.append(total_loss.detach().cpu())
+                lamem_losses.append(lamem_loss.detach().cpu())
+                other_losses.append(loss_train.detach().cpu())
 
                 group_lrs = []
                 for _, group in enumerate(self.optimizer.param_groups):
@@ -458,32 +579,57 @@ class ImageNetTrainer:
                 names = ["ep", "iter", "shape", "lrs"]
                 values = [epoch, ix, tuple(images.shape), group_lrs]
                 if self.config["log_level"] > 1:
-                    names += ["loss"]
-                    values += [f"{loss_train.item():.3f}"]
+                    names += ["total_loss", "lamem_loss", "other_loss"]
+                    values += [f"{total_loss.item():.3f}", f"{lamem_loss.item():.3f}", f"{loss_train.item():.3f}"]
 
                 msg = ", ".join(f"{n}={v}" for n, v in zip(names, values))
                 iterator.set_description(msg)
-
+            
             # if ix == 0:
             #     break
-        return np.mean(losses)
+        
+        # Calculate geometric mean of losses for the entire epoch
+        epoch_total_loss = gmean([l.item() for l in losses])
+        epoch_lamem_loss = gmean([l.item() for l in lamem_losses])
+        epoch_other_loss = gmean([l.item() for l in other_losses])
+        
+        print(f"{epoch_total_loss = }")
+        print(f"{epoch_lamem_loss = }")
+        print(f"{epoch_other_loss = }")
+
+        return epoch_total_loss, epoch_lamem_loss, epoch_other_loss
 
     def val_loop(self):
         model = self.model
         model.eval()
         with ch.no_grad():
             with autocast():
-                for ix, (images, target) in tqdm(enumerate(self.val_loader)):
-                    output = self.model(images)
+                for ix, (images, target) in tqdm(enumerate(self.val_loader), desc="Val"):
+                    clf_output, _ = self.model(images)
                     if self.config["lr_tta"]:
-                        output += self.model(ch.flip(images, dims=[3]))
+                        clf_output += self.model(ch.flip(images, dims=[3]))[0] # TTA for classification
 
                     for k in ["top_1", "top_5"]:
-                        self.val_meters[k](output, target)
+                        self.val_meters[k](clf_output, target)
 
-                    loss_val = self.loss(output, target)
+                    loss_val = self.loss(clf_output, target)
                     self.val_meters["loss"](loss_val)
-
+                    
+                    # if ix == 0:
+                    #     break
+                
+                for ix, (images, target) in tqdm(enumerate(self.lamem_val_loader), desc="LaMem Val"):
+                    _ ,reg_output = self.model(images)
+                    
+                    print(f"{reg_output = }")
+                    print(f"{target = }")
+                    
+                    loss_val = self.lamem_loss(reg_output, target)
+                    print(f"{loss_val = }")
+                    
+                    print(f"{loss_val.size() = }")
+                    self.val_meters["lamem_loss"](loss_val)
+                    
                     # if ix == 0:
                     #     break
 
@@ -499,6 +645,7 @@ class ImageNetTrainer:
                 top_k=5,
             ).to(self.gpu),
             "loss": MeanScalarMetric().to(self.gpu),
+            "lamem_loss": MeanScalarMetric().to(self.gpu),
         }
 
         if self.gpu == 0:
@@ -662,7 +809,7 @@ def save_model_checkpoint(model, optimizer, epoch, version_dir, metric_value):
 
 def main():
     config = {
-        "arch": "resnet101",
+        "arch": "resnet18",
         "weights": None,
         "min_res": 160,
         "max_res": 192,
@@ -679,8 +826,8 @@ def main():
         "lr_schedule_type": "cyclic",
         "lr": 1.7,
         "lr_peak_epoch": 2,
-        "folder": "./resnet101_logs",
-        "model_ckpt_path": "./resnet101_weights",
+        "folder": "./resnet18_logs",
+        "model_ckpt_path": "./resnet18_weights",
         "every_n_epochs": 5,
         "log_level": 1,
         "train_batch_size": 512,
@@ -691,13 +838,12 @@ def main():
         "optimizer": "sgd",
         "momentum": 0.9,
         "weight_decay": 0.0001,
-        "random_labels": 1,
         "epochs": 91,
         "label_smoothing": 0.1,
-        "distributed": 1,
+        "distributed": 0,
         "use_blurpool": 1,
         "checkpoint": None,
-        "world_size": 4,
+        "world_size": 1,
         "address": "localhost",
         "port": "12355",
     }

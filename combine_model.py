@@ -9,7 +9,6 @@ ch.autograd.profiler.emit_nvtx(False)
 ch.autograd.profiler.profile(False)
 
 from torchvision import models
-from torchvision import transforms
 import torchmetrics
 import numpy as np
 from tqdm import tqdm
@@ -36,13 +35,12 @@ from ffcv.transforms import (
     NormalizeImage,
     RandomHorizontalFlip,
     ToTorchImage,
-    Convert,
 )
 from ffcv.fields.rgb_image import (
     CenterCropRGBImageDecoder,
     RandomResizedCropRGBImageDecoder,
 )
-from ffcv.fields.basics import IntDecoder, FloatDecoder
+from ffcv.fields.basics import IntDecoder
 
 
 class BlurPoolConv2d(ch.nn.Module):
@@ -101,9 +99,7 @@ class ImageNetTrainer:
         if verbose:
             print("loading dataset...")
         self.train_loader = self.create_train_loader()
-        # self.lamem_train_laoder = self.create_lamem_train_loader()
         self.val_loader = self.create_val_loader()
-        # self.lamem_val_loader = self.create_lamem_val_loader()
 
         if verbose:
             print("loading model and optimizers...")
@@ -179,47 +175,6 @@ class ImageNetTrainer:
         self.optimizer = ch.optim.SGD(param_groups, lr=1, momentum=momentum)
         self.loss = ch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-    def create_lamem_train_loader(self):
-        train_dataset = self.config["lamem_train_dataset"]
-        distributed = self.config["distributed"]
-        batch_size = self.config["train_batch_size"]
-        num_workers = self.config["num_workers"]
-        in_memory = self.config["in_memory"]
-
-        this_device = f"cuda:{self.gpu}"
-        image_pipeline = [
-            self.decoder,
-            RandomHorizontalFlip(),
-            ToTensor(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-            transforms.RandomVerticalFlip(),
-            transforms.RandomRotation(degrees=13),
-            ToTorchImage(),
-            NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
-        ]
-
-        label_pipeline = [
-            FloatDecoder(),
-            ToTensor(),
-            Squeeze(),
-            Convert(ch.float16),
-            ToDevice(ch.device(this_device), non_blocking=True),
-        ]
-
-        order = OrderOption.RANDOM if distributed else OrderOption.QUASI_RANDOM
-        loader = Loader(
-            train_dataset,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            order=order,
-            os_cache=in_memory,
-            drop_last=True,
-            pipelines={"image": image_pipeline, "label": label_pipeline},
-            distributed=distributed,
-        )
-
-        return loader
-
     def create_train_loader(self):
         train_dataset = self.config["train_dataset"]
         num_workers = self.config["num_workers"]
@@ -261,45 +216,6 @@ class ImageNetTrainer:
             distributed=distributed,
         )
 
-        return loader
-
-    def create_lamem_val_loader(self):
-        val_dataset = self.config["lamem_val_dataset"]
-        num_workers = self.config["num_workers"]
-        batch_size = self.config["val_batch_size"]
-        resolution = self.config["resolution"]
-        distributed = self.config["distributed"]
-
-        this_device = f"cuda:{self.gpu}"
-        val_path = Path(val_dataset)
-        assert val_path.is_file()
-        res_tuple = (resolution, resolution)
-        cropper = CenterCropRGBImageDecoder(res_tuple, ratio=DEFAULT_CROP_RATIO)
-        image_pipeline = [
-            cropper,
-            ToTensor(),
-            ToDevice(ch.device(this_device), non_blocking=True),
-            ToTorchImage(),
-            NormalizeImage(LAMEM_MEAN, LAMEM_STD, np.float16),
-        ]
-
-        label_pipeline = [
-            FloatDecoder(),
-            ToTensor(),
-            Squeeze(),
-            Convert(ch.float16),
-            ToDevice(ch.device(this_device), non_blocking=True),
-        ]
-
-        loader = Loader(
-            val_dataset,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            order=OrderOption.SEQUENTIAL,
-            drop_last=False,
-            pipelines={"image": image_pipeline, "label": label_pipeline},
-            distributed=distributed,
-        )
         return loader
 
     def create_val_loader(self):
@@ -426,16 +342,6 @@ class ImageNetTrainer:
 
         iterator = tqdm(self.train_loader)
         for ix, (images, target) in enumerate(iterator):
-            if self.config["random_labels"]:
-                # Print first 10 labels before shuffling
-                # print("Original labels (first 10):", target[:10].cpu().numpy())
-
-                # Shuffle labels
-                target = target[ch.randperm(target.size(0))]
-
-                # Print first 10 labels after shuffling
-                # print("Shuffled labels (first 10):", shuffled_target[:10].cpu().numpy())
-
             for param_group in self.optimizer.param_groups:
                 param_group["lr"] = lrs[ix]
 
@@ -566,11 +472,6 @@ IMAGENET_MEAN = np.array([0.485, 0.456, 0.406]) * 255
 IMAGENET_STD = np.array([0.229, 0.224, 0.225]) * 255
 DEFAULT_CROP_RATIO = 224 / 256
 
-stats_tensor = ch.load(
-    "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/datasets/LaMem/support_files/lamem_mean_std_tensor.pt"
-).numpy()
-LAMEM_MEAN, LAMEM_STD = stats_tensor[:3] * 255, stats_tensor[3:] * 255
-
 
 def get_step_lr(epoch, lr, step_ratio, step_length, epochs):
     if epoch >= epochs:
@@ -662,7 +563,7 @@ def save_model_checkpoint(model, optimizer, epoch, version_dir, metric_value):
 
 def main():
     config = {
-        "arch": "resnet101",
+        "arch": "resnet18",
         "weights": None,
         "min_res": 160,
         "max_res": 192,
@@ -670,8 +571,6 @@ def main():
         "start_ramp": 65,
         "train_dataset": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_train_256.ffcv",
         "val_dataset": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_validation_256.ffcv",
-        "lamem_train_dataset": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/lamem_train_256.ffcv",
-        "lamem_val_dataset": "/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/lamem_validation_256.ffcv",
         "num_workers": 10,
         "in_memory": 1,
         "step_ratio": 0.1,
@@ -679,8 +578,8 @@ def main():
         "lr_schedule_type": "cyclic",
         "lr": 1.7,
         "lr_peak_epoch": 2,
-        "folder": "./resnet101_logs",
-        "model_ckpt_path": "./resnet101_weights",
+        "folder": "./resnet18_logs",
+        "model_ckpt_path": "./resnet18_weights",
         "every_n_epochs": 5,
         "log_level": 1,
         "train_batch_size": 512,
@@ -691,7 +590,6 @@ def main():
         "optimizer": "sgd",
         "momentum": 0.9,
         "weight_decay": 0.0001,
-        "random_labels": 1,
         "epochs": 91,
         "label_smoothing": 0.1,
         "distributed": 1,

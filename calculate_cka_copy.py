@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import argparse
 import os
 import pickle
@@ -86,7 +88,7 @@ def CKA(X, Y):
 
 
 def load_features(feature_path, model_name, task_name):
-    with open(os.path.join(feature_path, f"{model_name}_{task_name}.pkl"), "rb") as fin:
+    with open(os.path.join(feature_path, f"{model_name}_{task_name}_1.pkl"), "rb") as fin:
         features = pickle.load(fin)
 
     return features
@@ -129,7 +131,7 @@ def get_cka_score(
 
 @profile
 def main(args: argparse.Namespace = None):
-    task1, task2 = "imagenet", "lamem"
+    task1, task2 = "lamem_shuffle", "lamem"
     model_name = args.model_name
     multiprocess = False
 

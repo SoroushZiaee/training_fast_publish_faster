@@ -16,8 +16,8 @@ for batch_size in "${batch_sizes[@]}"; do
         --data.in_memory=1 \
         --data.num_workers=5 \
         --dist.world_size=4 \
-        --logging.folder=./runs/alexnet_logs_clf \
-        --logging.model_ckpt_path=./weights/alexnet_weights_clf \
+        --logging.folder=./runs/vgg19_logs_clf \
+        --logging.model_ckpt_path=./weights/vgg19_weights_clf \
         --logging.log_level=1 \
         --lr.lr_schedule_type=steplr \
         --lr.lr_step_size=30 \
@@ -27,7 +27,7 @@ for batch_size in "${batch_sizes[@]}"; do
         --lr.lr_warmup_decay=0.01 \
         --lr.lr=${learning_rate} \
         --lr.lr_min=0.0 \
-        --model.arch=alexnet \
+        --model.arch=vgg19 \
         --resolution.min_res=160 \
         --resolution.max_res=192 \
         --resolution.end_ramp=13 \

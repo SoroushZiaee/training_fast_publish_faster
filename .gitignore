@@ -171,3 +171,4 @@ log
 *.yaml
 *.pkl
 *.h5
+*.onnx

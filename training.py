@@ -111,6 +111,7 @@ Section("training", "training hyper param stuff").params(
     distributed=Param(int, "is distributed?", default=0),
     use_blurpool=Param(int, "use blurpool?", default=0),
     auto_augment=Param(int, "use auto_augment?", default=0),
+    random_labels=Param(int, "random labels", default=0),
     random_erase_prob=Param(float, "random erase prob", default=0.5),
 )
 
@@ -815,7 +816,8 @@ class ImageNetTrainer:
         return model, scaler
 
     @param("logging.log_level")
-    def train_loop(self, epoch, log_level):
+    @param("training.random_labels")
+    def train_loop(self, epoch, log_level, random_labels):
         model = self.model
         model.train()
         losses = []
@@ -826,6 +828,8 @@ class ImageNetTrainer:
 
         iterator = tqdm(self.train_loader)
         for ix, (images, target) in enumerate(iterator):
+            if random_labels:
+                target = target[ch.randperm(target.size(0))]
             ### Training start
             # for param_group in self.optimizer.param_groups:
             #     param_group["lr"] = lrs[ix]

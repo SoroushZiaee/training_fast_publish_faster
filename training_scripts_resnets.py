@@ -662,7 +662,7 @@ def save_model_checkpoint(model, optimizer, epoch, version_dir, metric_value):
 
 def main():
     config = {
-        "arch": "resnet101",
+        "arch": "resnet50",
         "weights": None,
         "min_res": 160,
         "max_res": 192,
@@ -679,8 +679,8 @@ def main():
         "lr_schedule_type": "cyclic",
         "lr": 1.7,
         "lr_peak_epoch": 2,
-        "folder": "./resnet101_logs",
-        "model_ckpt_path": "./resnet101_weights",
+        "folder": "./resnet50_logs",
+        "model_ckpt_path": "./resnet50_weights",
         "every_n_epochs": 5,
         "log_level": 1,
         "train_batch_size": 512,

@@ -1,47 +1,43 @@
 #!/bin/bash
-#SBATCH --output=imagenet.out
-#SBATCH --error=imagenet.err
-#SBATCH --time=2-00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=0
 
-echo "Starting job script..."
+#SBATCH --account=def-kohitij
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=12:00:00
+#SBATCH --job-name=imagenet_processing
+#SBATCH --output=%x-%j.out
+#SBATCH --errot=%x-%j.err
 
-# Move to local disk
-echo "Changing directory to SLURM temporary directory..."
-cd $SLURM_TMPDIR
 
-# Create a work directory
-echo "Creating work directory..."
-mkdir train
-cd train
+echo "Start Installing and setup env"
+source /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/bash/prepare_env/setup_env_node.sh
 
-# Copy the tar file from project space to local disk
-echo "Copying imagenet.tar from project space to local disk..."
-cp /home/soroush1/projects/def-kohitij/soroush1/imagenet/ILSVRC2012_img_train.tar .
+module list
 
-# Extract the tar file using pigz for parallel uncompression and verbose output
-echo "Extracting imagenet.tar using pigz..."
-python /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/extract_script.py ILSVRC2012_img_train.tar .
+pip freeze
 
-# Remove the tar file to free up space
-echo "Removing imagenet.tar to free up space..."
-rm ILSVRC2012_img_train.tar
+virtualenv --no-download $SLURM_TMPDIR/env
+source $SLURM_TMPDIR/env/bin/activate
 
-# Now do the computations with the extracted data...
-# For example, running a training script
-# Now do the computations with the extracted data...
-# For example, running a training script
-echo "Starting computations with the extracted data..."
-python /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/check_imagenet_bash_scripts.py --folder .
+pip install --no-index --upgrade pip
 
-# Clean up
-echo "Creating a tar archive of the results..."
-cd $SLURM_TMPDIR
+echo "Installing requirements"
+pip install --no-index -r requirements.txt
 
-# Optionally, remove extracted data to free up space
-# Optionally, remove extracted data to free up space
-echo "Removing extracted data to free up space..."
-rm -rf train
+echo "Env has been set up"
+
+pip freeze
+
+# Set path variables
+IMAGENET_ROOT="/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet"
+SCRIPT_DIR="/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/scripts/test_imagenet_class.py"
+
+# Activate your virtual environment if you're using one
+# source /path/to/your/venv/bin/activate
+
+# Run your Python script that uses the ImageNet class
+python $SCRIPT_DIR --root $IMAGENET_ROOT --temp_extract
+# /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/bash/notebooks/lab.sh
+
+
+echo "ImageNet processing complete!"

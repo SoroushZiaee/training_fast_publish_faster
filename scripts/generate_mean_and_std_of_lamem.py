@@ -26,13 +26,20 @@ root = "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/data/lame
 resize = 256
 desired_image_size = 224
 
-train_transforms_list = transforms.Compose([
-    transforms.Resize((resize, resize), PIL.Image.BILINEAR),
-    transforms.ToTensor(),
-])
+train_transforms_list = transforms.Compose(
+    [
+        transforms.Resize((resize, resize), PIL.Image.BILINEAR),
+        transforms.ToTensor(),
+    ]
+)
 
 # Initialize dataset
-obj = LaMem(root, ["train_1.csv", "val_1.csv", "test_1.csv"], transforms=train_transforms_list, change_labels=False)
+obj = LaMem(
+    root,
+    ["train_1.csv", "val_1.csv", "test_1.csv"],
+    transforms=train_transforms_list,
+    change_labels=False,
+)
 print(f"{len(obj) = }")
 
 x, y = obj[0]
@@ -45,22 +52,21 @@ print(f"{x.min() = }")
 x = transforms.ToPILImage()(x)
 x = np.asarray(x)
 
-
-
-
 plt.imshow(x)
 plt.savefig("lamem_sample.png")
 plt.close()
 
 
 root = "/datashare/ImageNet/ILSVRC2012"
-meta_path = "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/data/ImageNet"
+meta_path = (
+    "/home/soroush1/projects/def-kohitij/soroush1/pretrain-imagenet/data/ImageNet"
+)
 obj = ImageNet(
-                root=root,
-                split="train",
-                dst_meta_path=meta_path,
-                transform=train_transforms_list,
-            )
+    root=root,
+    split="train",
+    dst_meta_path=meta_path,
+    transform=train_transforms_list,
+)
 
 print(f"{len(obj) = }")
 

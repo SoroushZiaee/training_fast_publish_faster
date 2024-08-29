@@ -43,7 +43,8 @@ class ImageNet(ImageFolder):
 
     def load_meta_file(self) -> Tuple[Dict[str, str], List[str]]:
         file = os.path.join(self.dst_meta_path, META_FILE)
-        return torch.load(file, weights_only=True)
+        # return torch.load(file, weights_only=True)
+        return torch.load(file)
 
     def parse_archives(self) -> None:
         if not os.path.exists(os.path.join(self.dst_meta_path, META_FILE)):

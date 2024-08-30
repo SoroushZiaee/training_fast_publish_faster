@@ -169,3 +169,6 @@ log
 *.pt
 *.png
 *.yaml
+*.pkl
+*.h5
+*.onnx

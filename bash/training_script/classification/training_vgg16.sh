@@ -14,10 +14,10 @@ for batch_size in "${batch_sizes[@]}"; do
         --data.train_dataset=/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_train_256.ffcv \
         --data.val_dataset=/home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/data/imagenet_validation_256.ffcv \
         --data.in_memory=1 \
-        --data.num_workers=10 \
+        --data.num_workers=5 \
         --dist.world_size=4 \
-        --logging.folder=./alexnet_logs \
-        --logging.model_ckpt_path=./alexnet_weights \
+        --logging.folder=./runs/vgg16_logs_clf \
+        --logging.model_ckpt_path=./weights/vgg16_weights_clf \
         --logging.log_level=1 \
         --lr.lr_schedule_type=steplr \
         --lr.lr_step_size=30 \
@@ -27,13 +27,13 @@ for batch_size in "${batch_sizes[@]}"; do
         --lr.lr_warmup_decay=0.01 \
         --lr.lr=${learning_rate} \
         --lr.lr_min=0.0 \
-        --model.arch=alexnet \
+        --model.arch=vgg16 \
         --resolution.min_res=160 \
         --resolution.max_res=192 \
         --resolution.end_ramp=13 \
         --resolution.start_ramp=11 \
         --resolution.fix_res=0 \
-        --training.task=reg \
+        --training.task=clf \
         --training.eval_only=0 \
         --training.batch_size=${batch_size} \
         --training.optimizer=sgd \
@@ -43,6 +43,7 @@ for batch_size in "${batch_sizes[@]}"; do
         --training.label_smoothing=0.1 \
         --training.distributed=1 \
         --training.use_blurpool=1 \
+        --training.random_labels=1 \
         --validation.batch_size=256 \
         --validation.resolution=256 \
         --validation.lr_tta=1

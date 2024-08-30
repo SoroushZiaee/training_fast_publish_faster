@@ -78,9 +78,7 @@ class LaMem(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img_name = os.path.join(
-            self.images_path, self.mem_frame["image_name"][idx]
-        )
+        img_name = os.path.join(self.images_path, self.mem_frame["image_name"][idx])
         # image = torch.load(img_name)
         # image = np.load(img_name, allow_pickle=True)
         image = PIL.Image.open(img_name).convert("RGB")
@@ -176,8 +174,7 @@ def main(
         my_dataset = Subset(my_dataset, range(subset))
         print(f"{len(my_dataset) =}")
     print("here")
-    
-    
+
     # Pass a type for each data field
     writer = DatasetWriter(
         write_path,
@@ -192,7 +189,7 @@ def main(
         },
         num_workers=num_workers,
     )
-    
+
     # Write dataset
     writer.from_indexed_dataset(my_dataset, chunksize=chunk_size)
 

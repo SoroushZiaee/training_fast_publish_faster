@@ -10,4 +10,4 @@
 #SBATCH --mail-type=BEGIN,END,FAIL # Send email on job BEGIN, END and FAIL
 #SBATCH --mail-user=soroush1@yorku.ca
 
-srun /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/bash/training_alexnet.sh
+srun /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/bash/regression_alexnet.sh

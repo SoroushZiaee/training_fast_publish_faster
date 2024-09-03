@@ -28,4 +28,4 @@ echo "Env has been set up"
 
 pip freeze
 
-srun python pickle_to_h5_pooling_layers.py --model_names resnet50 resnet101  --dst_path /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/pool_layers_h5 --src_path /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/pool_layers_pkl
+srun python /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/load_feature_pkl_files_and_convert_to_h5.py --dst_path /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/pool_layers_h5 --src_path /home/soroush1/projects/def-kohitij/soroush1/training_fast_publish_faster/pool_layers_pkl --node_id $SLURM_ARRAY_TASK_ID

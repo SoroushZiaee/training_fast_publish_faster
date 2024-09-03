@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=10
 #SBATCH --time=00:30:00
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gres=gpu:t4:1
 #SBATCH --mem=50G
 #SBATCH --mail-type=BEGIN,END,FAIL # Send email on job BEGIN, END and FAIL
 #SBATCH --mail-user=soroush1@yorku.ca
@@ -35,6 +35,7 @@ pip freeze
 # srun python extract_layer_features.py --model resnet18 --task lamem_pretrain_freeze
 # srun python extract_layer_features.py --model resnet18 --task lamem_pretrain_no_freeze
 # srun python extract_layer_features.py --model resnet18 --task lamem_shuffle_pretrain_freeze
+srun python extract_layer_features.py --model resnet18 --task no_model
 
 
 
